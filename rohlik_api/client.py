@@ -2,7 +2,6 @@
 
 import httpx
 from typing import Optional, Dict, Any, List
-from urllib.parse import urljoin
 
 
 class RohlikAPI:
@@ -68,17 +67,6 @@ class RohlikAPI:
         """Close the HTTP client and release resources."""
         if self.client:
             self.client.close()
-    
-    def _make_url(self, endpoint: str) -> str:
-        """Construct full URL from endpoint.
-        
-        Args:
-            endpoint: API endpoint path
-            
-        Returns:
-            Full URL string
-        """
-        return urljoin(f"{self.base_url}/", endpoint.lstrip("/"))
     
     def get(
         self,

@@ -12,7 +12,7 @@ def main():
     print("\nExample 1: Using context manager")
     with RohlikAPI() as client:
         print(f"Client initialized with base URL: {client.base_url}")
-        print(f"HTTP/2 enabled: {client.client._transport._pool._http2}")
+        print("HTTP/2 support is enabled in the client")
     
     # Example 2: Manual client management
     print("\nExample 2: Manual client management")

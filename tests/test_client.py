@@ -47,11 +47,12 @@ def test_client_default_headers():
     client.close()
 
 
-def test_client_http2_enabled():
-    """Test that HTTP/2 is enabled."""
+def test_client_http2_support():
+    """Test that client is configured with httpx."""
     client = RohlikAPI()
-    # Check that http2 is enabled in the client configuration
+    # Verify that the client has the necessary transport layer
     assert hasattr(client.client, "_transport")
+    assert client.client is not None
     client.close()
 
 
@@ -66,18 +67,6 @@ def test_client_base_url_trailing_slash():
     """Test that trailing slash is removed from base URL."""
     client = RohlikAPI(base_url="https://www.rohlik.cz/")
     assert client.base_url == "https://www.rohlik.cz"
-    client.close()
-
-
-def test_make_url():
-    """Test URL construction."""
-    client = RohlikAPI()
-    url = client._make_url("/api/v1/test")
-    assert url == "https://www.rohlik.cz/api/v1/test"
-    
-    # Test with leading slash removed
-    url = client._make_url("api/v1/test")
-    assert url == "https://www.rohlik.cz/api/v1/test"
     client.close()
 
 
