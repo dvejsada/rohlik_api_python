@@ -6,10 +6,8 @@ An async Python client library for interacting with the Rohlik.cz API using http
 
 - 🚀 HTTP/2 support for improved performance
 - 🔐 Secure authentication with persistent sessions
-- 🔒 Type hints for better IDE support
 - 🎯 Simple and intuitive async API
 - 🔄 Async context manager support
-- 📦 Ready for PyPI distribution
 
 ## Installation
 

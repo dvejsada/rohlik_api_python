@@ -82,26 +82,29 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # Required for trusted publishing
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build twine
+        pip install build
     - name: Build package
       run: python -m build
     - name: Publish to PyPI
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: python -m twine upload dist/*
+      uses: pypa/gh-action-pypi-publish@release/v1
 ```
 
-Store your PyPI API token as a GitHub secret named `PYPI_API_TOKEN`.
+Configure Trusted Publishing on PyPI:
+1. Go to your project on PyPI → Publishing
+2. Add a new "pending publisher" with your GitHub repo details
+3. Create an environment named `pypi` in your GitHub repo settings
 
 ## Version Updates
 

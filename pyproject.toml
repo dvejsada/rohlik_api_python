@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rohlik-api"
 version = "0.1.0"
-description = "Python client for Rohlik.cz API with HTTP/2 support"
+description = "Python client for Rohlik.cz API "
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -13,30 +13,35 @@ license-files = ["LICENSE"]
 authors = [
     {name = "george", email = "noreply@github.com"}
 ]
-keywords = ["rohlik", "api", "client", "http2", "grocery"]
+keywords = ["rohlik", "api", "client", "grocery"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
 ]
 dependencies = [
-    "httpx[http2]>=0.24.0",
+    "httpx[http2]>=0.28.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-asyncio>=0.21.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
+    "pytest>=9.0.0",
+    "pytest-cov>=7.0.0",
+    "pytest-asyncio>=1.3.0",
+    "black>=25.0.0",
+    "ruff>=0.14.0",
+    "mypy>=1.19.0",
 ]
 
 [project.urls]
@@ -52,11 +57,13 @@ rohlik_api = ["py.typed"]
 
 [tool.black]
 line-length = 100
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ["py38", "py39", "py310", "py311", "py312", "py313", "py314"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py38"
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -68,7 +75,7 @@ select = [
 ]
 ignore = []
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
 [tool.mypy]
