@@ -39,21 +39,22 @@ class RohlikAPI:
     This client uses httpx with HTTP/2 support for optimal performance
     when communicating with the Rohlik.cz API endpoints.
     
-    The client maintains a persistent session - once logged in, the session
-    remains authenticated until logout() is called or the client is closed.
+    When used as an async context manager with auto_login=True (default),
+    the client automatically logs in on entry and logs out on exit.
 
     Args:
-        username: Email address used for Rohlik.cz login
-        password: Password for Rohlik.cz account
+        username: Email address used for Rohlik.cz login (required)
+        password: Password for Rohlik.cz account (required)
         base_url: Base URL for the Rohlik.cz API. Defaults to https://www.rohlik.cz
         timeout: Request timeout in seconds. Defaults to 30.0
         headers: Optional custom headers to include in all requests
-        
+        auto_login: If True (default), automatically login when using context manager
+
     Example:
         >>> from rohlik_api import RohlikAPI
         >>> async def main():
         ...     async with RohlikAPI("username@example.com", "password") as client:
-        ...         await client.login()
+        ...         # No need to call login() - it's automatic!
         ...         data = await client.get_cart_content()
         ...         print(data)
         ...     # logout is called automatically on exit
@@ -74,15 +75,29 @@ class RohlikAPI:
 
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str,
+        password: str,
         base_url: str = BASE_URL,
         timeout: float = 30.0,
         headers: Optional[Dict[str, str]] = None,
+        auto_login: bool = True,
     ):
-        """Initialize the Rohlik API client."""
+        """Initialize the Rohlik API client.
+
+        Args:
+            username: Email address used for Rohlik.cz login (required)
+            password: Password for Rohlik.cz account (required)
+            base_url: Base URL for the Rohlik.cz API
+            timeout: Request timeout in seconds
+            headers: Optional custom headers to include in all requests
+            auto_login: If True, automatically login when using context manager
+        """
+        if not username or not password:
+            raise ValueError("Username and password are required")
+
         self._username = username
         self._password = password
+        self._auto_login = auto_login
         self._user_id: Optional[int] = None
         self._address_id: Optional[int] = None
         self._is_logged_in: bool = False
@@ -120,7 +135,9 @@ class RohlikAPI:
         return self._is_logged_in
 
     async def __aenter__(self):
-        """Async context manager entry."""
+        """Async context manager entry - logs in automatically if auto_login is True."""
+        if self._auto_login:
+            await self.login()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -231,8 +248,6 @@ class RohlikAPI:
             _LOGGER.debug("Already logged in, skipping login request")
             return {"status": 200, "message": "Already logged in"}
 
-        if not self._username or not self._password:
-            raise ValueError("Username and password are required for login")
 
         login_data = {"email": self._username, "password": self._password, "name": ""}
         login_url = "/services/frontend-service/login"
