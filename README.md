@@ -5,9 +5,11 @@ An async Python client library for interacting with the Rohlik.cz API using http
 ## Features
 
 - 🚀 HTTP/2 support for improved performance
-- 🔐 Secure authentication with persistent sessions
-- 🎯 Simple and intuitive async API
+- 🔐 Secure authentication with automatic session management
+- 🎯 Clean service-based API architecture
 - 🔄 Async context manager support
+- 🍳 Recipe search and ingredient products (Rohlík Chef)
+- 📦 Product details, composition, and AI summaries
 
 ## Installation
 
@@ -22,63 +24,27 @@ import asyncio
 from rohlik_api import RohlikAPI
 
 async def main():
-    # Login happens automatically when entering the context manager
     async with RohlikAPI(username="your_email@example.com", password="your_password") as client:
-        # No need to call login() - it's automatic!
-        
         # Search for products
-        results = await client.search_product("mleko", limit=5)
+        results = await client.products.search("mleko", limit=5)
         print(f"Search results: {results}")
         
         # Get cart contents
-        cart = await client.get_cart_content()
+        cart = await client.cart.get_content()
         print(f"Cart: {cart}")
         
         # Get delivery information
-        delivery = await client.get_delivery_info()
+        delivery = await client.delivery.get_info()
         print(f"Delivery: {delivery}")
         
-        # Logout is called automatically when exiting context manager
-
-asyncio.run(main())
-```
-
-### Using Context Manager (Recommended)
-
-```python
-import asyncio
-from rohlik_api import RohlikAPI
-
-async def main():
-    # Auto-login on enter, auto-logout on exit
-    async with RohlikAPI(username="email@example.com", password="password") as client:
-        cart = await client.get_cart_content()
-
-asyncio.run(main())
-```
-
-### Manual Session Management
-
-```python
-import asyncio
-from rohlik_api import RohlikAPI
-
-async def main():
-    client = RohlikAPI(username="email@example.com", password="password")
-    try:
-        # Without context manager, you must call login() manually
-        await client.login()
-        cart = await client.get_cart_content()
-        await client.logout()
-    finally:
-        await client.close()
+        # Search recipes
+        recipes = await client.recipes.search("rajská", limit=5)
+        print(f"Recipes: {recipes}")
 
 asyncio.run(main())
 ```
 
 ## Configuration
-
-You can customize the client behavior:
 
 ```python
 from rohlik_api import RohlikAPI
@@ -86,66 +52,183 @@ from rohlik_api import RohlikAPI
 client = RohlikAPI(
     username="your_email@example.com",
     password="your_password",
-    base_url="https://www.rohlik.cz",
-    timeout=30.0,
-    headers={
-        "Custom-Header": "Value"
-    }
+    base_url="https://www.rohlik.cz",  # Optional
+    timeout=30.0,                       # Optional
+    headers={"Custom-Header": "Value"}, # Optional
+    auto_login=True                     # Optional, default True
 )
 ```
 
-## API Methods
+## Services
 
-### Authentication
+The client provides access to functionality through service properties:
 
-- `login()` - Authenticate with Rohlik.cz
-- `logout()` - Log out from the service
-- `is_logged_in` - Property to check login status
+| Service | Property | Description |
+|---------|----------|-------------|
+| Cart | `client.cart` | Shopping cart operations |
+| Products | `client.products` | Product search and details |
+| Orders | `client.orders` | Order history |
+| Delivery | `client.delivery` | Delivery info and timeslots |
+| Account | `client.account` | Account data and shopping lists |
+| Recipes | `client.recipes` | Recipe search and ingredients (Rohlík Chef) |
 
-### Products
+## API Reference
 
-- `search_product(product_name, limit=10, favourite=False)` - Search for products by name
+### Cart Service (`client.cart`)
 
-### Cart
+```python
+# Get cart contents
+cart = await client.cart.get_content()
+# Returns: {"total_price": 199.90, "total_items": 3, "can_make_order": True, "products": [...]}
 
-- `get_cart_content()` - Get current cart contents
-- `add_to_cart(product_list)` - Add products to cart (list of `{product_id, quantity}`)
-- `delete_from_cart(order_field_id)` - Remove item from cart
+# Add items to cart
+result = await client.cart.add_items([
+    {"product_id": 123456, "quantity": 2},
+    {"product_id": 789012, "quantity": 1}
+])
+# Returns: {"added_products": [123456, 789012]}
 
-### Shopping Lists
+# Delete item from cart
+await client.cart.delete_item(order_field_id="abc123")
+```
 
-- `get_shopping_list(shopping_list_id)` - Get shopping list by ID
+### Products Service (`client.products`)
 
-### Delivery & Orders
+```python
+# Search for products
+results = await client.products.search("mléko", limit=10, favourite=False)
+# Returns: {"search_results": [{"id": 123, "name": "...", "price": "29.90 Kč", ...}]}
 
-- `get_delivery_info()` - Get first delivery information
-- `get_next_order()` - Get upcoming order information
-- `get_last_order()` - Get last delivered order
-- `get_delivered_orders(limit=50, offset=0)` - Get list of delivered orders
-- `get_timeslot_reservation()` - Get current timeslot reservation
+# Get AI-generated product summary
+summary = await client.products.get_ai_summary(product_id=1384964)
+# Returns: {"product_id": 1384964, "title": "AI Souhrn", "content": "..."}
 
-### Account
+# Get product composition (nutritional values, allergens)
+composition = await client.products.get_composition(product_id=1425155)
+# Returns: {"nutritional_values": [...], "ingredients": "...", "allergens": {...}}
 
-- `get_premium_profile()` - Get premium profile information
-- `get_bags_info()` - Get reusable bags user information
-- `get_announcements()` - Get top announcements
-- `get_delivery_announcements()` - Get delivery announcements
-- `get_data()` - Get all account data in a single operation
+# Get product price
+price = await client.products.get_price(product_id=1425155)
+# Returns: {"product_id": 1425155, "price": 40.9, "currency": "CZK", "price_per_unit": 340.83}
+```
+
+### Orders Service (`client.orders`)
+
+```python
+# Get next (upcoming) order
+next_order = await client.orders.get_next()
+
+# Get last delivered order
+last_order = await client.orders.get_last()
+
+# Get delivered orders with pagination
+orders = await client.orders.get_delivered(limit=50, offset=0)
+```
+
+### Delivery Service (`client.delivery`)
+
+```python
+# Get delivery information
+delivery = await client.delivery.get_info()
+
+# Get current timeslot reservation
+timeslot = await client.delivery.get_timeslot_reservation()
+
+# Get next available delivery slots
+slots = await client.delivery.get_next_slots()
+
+# Get delivery announcements
+announcements = await client.delivery.get_announcements()
+```
+
+### Account Service (`client.account`)
+
+```python
+# Get premium profile
+premium = await client.account.get_premium_profile()
+
+# Get reusable bags info
+bags = await client.account.get_bags_info()
+
+# Get announcements
+announcements = await client.account.get_announcements()
+
+# Get shopping list by ID
+shopping_list = await client.account.get_shopping_list("list_id_here")
+# Returns: {"name": "My List", "products_in_list": [...]}
+```
+
+### Recipes Service (`client.recipes`)
+
+```python
+# Search for recipes
+recipes = await client.recipes.search("rajská", limit=10, offset=0)
+# Returns: {"recipes": [{"id": 59, "name": "Rajská omáčka", "image": "...", ...}], "total_hits": 4}
+
+# Get recipe details
+recipe = await client.recipes.get_detail(recipe_id=59)
+# Returns: {"id": 59, "name": "...", "ingredients": [...], "directions": [...], ...}
+
+# Get products for ingredients
+products = await client.recipes.get_ingredient_products(ingredient_ids=[102, 56], limit=5)
+# Returns: {"ingredients": [{"ingredient_id": 102, "products": [...], "total_hits": 3}]}
+```
+
+### Aggregated Data
+
+```python
+# Get all account data in a single operation
+all_data = await client.get_data()
+# Returns dict with: login, delivery, next_order, last_order, cart, premium_profile, etc.
+```
 
 ## Error Handling
 
 ```python
-from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError
+from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError, RohlikAPIError
 
 async def main():
-    async with RohlikAPI(username="email@example.com", password="password") as client:
-        try:
-            await client.login()
-            cart = await client.get_cart_content()
-        except InvalidCredentialsError as e:
-            print(f"Invalid credentials: {e}")
-        except APIRequestFailedError as e:
-            print(f"API request failed: {e}")
+    try:
+        async with RohlikAPI(username="email@example.com", password="password") as client:
+            cart = await client.cart.get_content()
+    except InvalidCredentialsError as e:
+        print(f"Invalid credentials: {e}")
+    except APIRequestFailedError as e:
+        print(f"API request failed: {e}")
+    except RohlikAPIError as e:
+        print(f"General API error: {e}")
+```
+
+## Advanced Usage
+
+### Manual Session Management
+
+```python
+from rohlik_api import RohlikAPI
+
+async def main():
+    client = RohlikAPI(
+        username="email@example.com",
+        password="password",
+        auto_login=False  # Disable auto-login
+    )
+    try:
+        await client._auth.login()
+        cart = await client.cart.get_content()
+        await client._auth.logout()
+    finally:
+        await client.close()
+```
+
+### Access Low-Level Components
+
+```python
+from rohlik_api import HttpClient, AuthManager, Endpoints
+
+# Use Endpoints for URL building
+url = Endpoints.product_price(1425155)
+url = Endpoints.recipe_search("polévka", limit=5)
+url = Endpoints.delivered_orders(limit=10, offset=0)
 ```
 
 ## Development
@@ -170,10 +253,7 @@ pytest
 ### Code Formatting
 
 ```bash
-# Format code with black
 black rohlik_api
-
-# Lint with ruff
 ruff check rohlik_api
 ```
 
@@ -191,6 +271,15 @@ MIT License - see LICENSE file for details.
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Changelog
+
+### 0.2.0 (2026-01-29)
+
+- **Breaking Change**: Refactored to service-based architecture
+- New services: `cart`, `products`, `orders`, `delivery`, `account`, `recipes`
+- Added Recipe service for Rohlík Chef (search, details, ingredient products)
+- Added Product details: AI summary, composition, price endpoints
+- Removed legacy methods in favor of service-based API
+- Improved code organization and maintainability
 
 ### 0.1.0 (2026-01-08)
 
