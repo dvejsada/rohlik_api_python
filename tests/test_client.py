@@ -177,4 +177,5 @@ class TestClientEndpoints:
         assert hasattr(client, 'orders')
         assert hasattr(client, 'delivery')
         assert hasattr(client, 'account')
+        assert hasattr(client, 'recipes')
 

@@ -35,6 +35,23 @@ class Endpoints:
     BAGS = "/api/v1/reusable-bags/user-info"
     ANNOUNCEMENTS = "/services/frontend-service/announcements/top"
 
+    # Recipes
+    RECIPE_SEARCH = "/services/frontend-service/recipe/search/{query}"
+    RECIPE_DETAIL = "/services/frontend-service/recipe/{recipe_id}"
+    INGREDIENT_PRODUCTS = "/services/frontend-service/v1/chef/ingredients/products"
+
+    @classmethod
+    def recipe_search(cls, query: str, limit: int = 10, offset: int = 0) -> str:
+        """Build recipe search endpoint URL."""
+        from urllib.parse import quote
+        encoded_query = quote(query)
+        return f"/services/frontend-service/recipe/search/{encoded_query}?offset={offset}&limit={limit}"
+
+    @classmethod
+    def recipe_detail(cls, recipe_id: int) -> str:
+        """Build recipe detail endpoint URL."""
+        return f"/services/frontend-service/recipe/{recipe_id}"
+
     @classmethod
     def shopping_list(cls, shopping_list_id: str) -> str:
         """Build shopping list endpoint URL."""

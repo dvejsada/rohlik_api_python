@@ -15,6 +15,7 @@ from .services import (
     OrderService,
     DeliveryService,
     AccountService,
+    RecipeService,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class RohlikAPI:
         orders (OrderService): Service for order operations (get_next, get_last, get_delivered)
         delivery (DeliveryService): Service for delivery info and timeslots
         account (AccountService): Service for account data (premium, bags, shopping lists)
+        recipes (RecipeService): Service for recipe search and ingredient products (Rohlík Chef)
 
     Example:
         Basic usage with context manager:
@@ -118,6 +120,7 @@ class RohlikAPI:
         self._orders = OrderService(self._http, self._auth)
         self._delivery = DeliveryService(self._http, self._auth)
         self._account = AccountService(self._http, self._auth)
+        self._recipes = RecipeService(self._http, self._auth)
 
     # -------------------------------------------------------------------------
     # Service Properties
@@ -147,6 +150,11 @@ class RohlikAPI:
     def account(self) -> AccountService:
         """Access account operations."""
         return self._account
+
+    @property
+    def recipes(self) -> RecipeService:
+        """Access recipe operations (Rohlík Chef)."""
+        return self._recipes
 
     @property
     def client(self) -> httpx.AsyncClient:

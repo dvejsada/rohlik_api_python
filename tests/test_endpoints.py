@@ -124,3 +124,32 @@ class TestEndpointsCompleteness:
         assert hasattr(Endpoints, 'PREMIUM_PROFILE')
         assert hasattr(Endpoints, 'BAGS')
         assert hasattr(Endpoints, 'ANNOUNCEMENTS')
+
+    def test_all_recipe_endpoints_exist(self):
+        """Test all recipe endpoints exist."""
+        assert hasattr(Endpoints, 'RECIPE_SEARCH')
+        assert hasattr(Endpoints, 'RECIPE_DETAIL')
+        assert hasattr(Endpoints, 'INGREDIENT_PRODUCTS')
+
+
+class TestEndpointsRecipeBuilders:
+    """Tests for recipe endpoint builder methods."""
+
+    def test_recipe_search_builder(self):
+        """Test recipe_search endpoint builder."""
+        result = Endpoints.recipe_search("rajská", limit=5, offset=0)
+        assert "raj" in result  # URL encoded
+        assert "limit=5" in result
+        assert "offset=0" in result
+
+    def test_recipe_search_builder_encodes_query(self):
+        """Test recipe_search URL encodes the query."""
+        result = Endpoints.recipe_search("česká kuchyně")
+        assert "%C4%8D" in result or "česká" not in result  # Should be encoded
+
+    def test_recipe_detail_builder(self):
+        """Test recipe_detail endpoint builder."""
+        result = Endpoints.recipe_detail(59)
+        assert "/59" in result
+        assert "recipe" in result
+
