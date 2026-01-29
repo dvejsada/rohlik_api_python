@@ -16,15 +16,15 @@ class TestClientInitialization:
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
         assert client.base_url == "https://www.rohlik.cz"
         assert client.timeout == 30.0
-        assert client._client is None  # Lazy initialization
+        assert client._http._client is None  # Lazy initialization
 
     def test_client_with_credentials(self):
         """Test client initializes with username and password."""
         client = RohlikAPI(username="test@example.com", password="password123")
-        assert client._username == "test@example.com"
-        assert client._password == "password123"
-        assert client._user_id is None
-        assert client._address_id is None
+        assert client._auth._username == "test@example.com"
+        assert client._auth._password == "password123"
+        assert client._auth.user_id is None
+        assert client._auth.address_id is None
         assert client.is_logged_in is False
 
     def test_client_requires_credentials(self):
@@ -52,23 +52,23 @@ class TestClientInitialization:
         """Test client with custom headers."""
         custom_headers = {"X-Custom-Header": "TestValue"}
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, headers=custom_headers)
-        assert "X-Custom-Header" in client._default_headers
-        assert client._default_headers["X-Custom-Header"] == "TestValue"
+        assert "X-Custom-Header" in client._http._headers
+        assert client._http._headers["X-Custom-Header"] == "TestValue"
 
     def test_client_default_headers(self):
         """Test that default headers are set."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
-        assert "User-Agent" in client._default_headers
-        assert "Accept" in client._default_headers
-        assert client._default_headers["Accept"] == "application/json"
+        assert "User-Agent" in client._http._headers
+        assert "Accept" in client._http._headers
+        assert client._http._headers["Accept"] == "application/json"
 
     def test_client_lazy_initialization(self):
         """Test that client is lazily initialized."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
-        assert client._client is None
+        assert client._http._client is None
         # Accessing client property creates the client
         _ = client.client
-        assert client._client is not None
+        assert client._http._client is not None
 
     def test_client_base_url_trailing_slash(self):
         """Test that trailing slash is removed from base URL."""
@@ -91,7 +91,7 @@ class TestAsyncContextManager:
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
         _ = client.client  # Create the client
         await client.close()
-        assert client._client is None
+        assert client._http._client is None
 
 
 class TestMaskData:
@@ -146,7 +146,7 @@ class TestClientAuthentication:
         """Test that get_shopping_list raises ValueError without ID."""
         client = RohlikAPI(username="test@example.com", password="password123", auto_login=False)
         with pytest.raises(ValueError, match="Missing argument"):
-            await client.get_shopping_list("")
+            await client.account.get_shopping_list("")
         await client.close()
 
 
@@ -154,19 +154,27 @@ class TestClientEndpoints:
     """Tests for endpoint configuration."""
 
     def test_endpoints_defined(self):
-        """Test that all required endpoints are defined."""
-        expected_endpoints = [
-            "delivery",
-            "next_order",
-            "announcements",
-            "bags",
-            "timeslot",
-            "last_order",
-            "premium_profile",
-            "next_delivery_slot",
-            "delivery_announcements",
-            "delivered_orders"
-        ]
-        for endpoint in expected_endpoints:
-            assert endpoint in RohlikAPI.ENDPOINTS
+        """Test that all required endpoints are defined in Endpoints class."""
+        from rohlik_api import Endpoints
+
+        # Check that all required endpoint constants exist
+        assert hasattr(Endpoints, 'DELIVERY')
+        assert hasattr(Endpoints, 'NEXT_ORDER')
+        assert hasattr(Endpoints, 'ANNOUNCEMENTS')
+        assert hasattr(Endpoints, 'BAGS')
+        assert hasattr(Endpoints, 'TIMESLOT_RESERVATION')
+        assert hasattr(Endpoints, 'LAST_ORDER')
+        assert hasattr(Endpoints, 'PREMIUM_PROFILE')
+        assert hasattr(Endpoints, 'TIMESLOTS_BASE')
+        assert hasattr(Endpoints, 'DELIVERY_ANNOUNCEMENTS')
+        assert hasattr(Endpoints, 'DELIVERED_ORDERS')
+
+    def test_service_properties_exist(self):
+        """Test that all service properties are available on RohlikAPI."""
+        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
+        assert hasattr(client, 'cart')
+        assert hasattr(client, 'products')
+        assert hasattr(client, 'orders')
+        assert hasattr(client, 'delivery')
+        assert hasattr(client, 'account')
 
