@@ -163,6 +163,126 @@ class TestProductService:
         assert len(result["search_results"]) == 1
         assert result["search_results"][0]["name"] == "Regular"
 
+    @pytest.mark.asyncio
+    async def test_get_ai_summary_returns_data(self, mock_http, mock_auth):
+        """Test get_ai_summary returns properly formatted data."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "productId": 1384964,
+            "rating": "EMPTY",
+            "title": "AI Souhrn",
+            "content": "Tato vepřová panenka je skvělá volba."
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_ai_summary(1384964)
+
+        assert result is not None
+        assert result["product_id"] == 1384964
+        assert result["title"] == "AI Souhrn"
+        assert "vepřová panenka" in result["content"]
+
+    @pytest.mark.asyncio
+    async def test_get_ai_summary_returns_none_on_error(self, mock_http, mock_auth):
+        """Test get_ai_summary returns None on error."""
+        import httpx
+        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_ai_summary(1384964)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_composition_returns_data(self, mock_http, mock_auth):
+        """Test get_composition returns properly formatted data."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "productId": 1425155,
+            "nutritionalValues": [
+                {
+                    "portion": "100 g",
+                    "values": {
+                        "energyKJ": {"amount": 1309.0, "unit": "kJ"},
+                        "energyKCal": {"amount": 313.0, "unit": "kCal"},
+                        "fats": {"amount": 4.3, "unit": "g"},
+                        "saturatedFats": {"amount": 0.8, "unit": "g"},
+                        "carbohydrates": {"amount": 38.0, "unit": "g"},
+                        "sugars": {"amount": 0.4, "unit": "g"},
+                        "protein": {"amount": 9.6, "unit": "g"},
+                        "salt": {"amount": 1.9, "unit": "g"},
+                        "fiber": {"amount": 0.0, "unit": "g"}
+                    }
+                }
+            ],
+            "plainIngredients": "PŠENIČNÁ mouka, voda, sůl",
+            "allergens": {
+                "contained": ["Obiloviny obsahující lepek"],
+                "possiblyContained": ["Vejce", "Mléko"]
+            }
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_composition(1425155)
+
+        assert result is not None
+        assert result["product_id"] == 1425155
+        assert len(result["nutritional_values"]) == 1
+        assert result["nutritional_values"][0]["energy_kcal"] == 313.0
+        assert result["nutritional_values"][0]["protein"] == 9.6
+        assert "PŠENIČNÁ mouka" in result["ingredients"]
+        assert "Obiloviny obsahující lepek" in result["allergens"]["contained"]
+        assert "Mléko" in result["allergens"]["possibly_contained"]
+
+    @pytest.mark.asyncio
+    async def test_get_composition_returns_none_on_error(self, mock_http, mock_auth):
+        """Test get_composition returns None on error."""
+        import httpx
+        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_composition(1425155)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_price_returns_data(self, mock_http, mock_auth):
+        """Test get_price returns properly formatted data."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "productId": 1425155,
+            "price": {"amount": 40.9, "currency": "CZK"},
+            "pricePerUnit": {"amount": 340.83, "currency": "CZK"},
+            "sales": []
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_price(1425155)
+
+        assert result is not None
+        assert result["product_id"] == 1425155
+        assert result["price"] == 40.9
+        assert result["currency"] == "CZK"
+        assert result["price_per_unit"] == 340.83
+        assert result["sales"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_price_returns_none_on_error(self, mock_http, mock_auth):
+        """Test get_price returns None on error."""
+        import httpx
+        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_price(1425155)
+
+        assert result is None
+
 
 class TestOrderService:
     """Tests for OrderService."""

@@ -157,7 +157,7 @@ class TestClientEndpoints:
         """Test that all required endpoints are defined in Endpoints class."""
         from rohlik_api import Endpoints
 
-        # Check that all required endpoint constants exist
+        # Check that required endpoint constants exist
         assert hasattr(Endpoints, 'DELIVERY')
         assert hasattr(Endpoints, 'NEXT_ORDER')
         assert hasattr(Endpoints, 'ANNOUNCEMENTS')
@@ -165,9 +165,11 @@ class TestClientEndpoints:
         assert hasattr(Endpoints, 'TIMESLOT_RESERVATION')
         assert hasattr(Endpoints, 'LAST_ORDER')
         assert hasattr(Endpoints, 'PREMIUM_PROFILE')
-        assert hasattr(Endpoints, 'TIMESLOTS_BASE')
         assert hasattr(Endpoints, 'DELIVERY_ANNOUNCEMENTS')
-        assert hasattr(Endpoints, 'DELIVERED_ORDERS')
+
+        # Check that builder methods exist
+        assert callable(getattr(Endpoints, 'timeslots', None))
+        assert callable(getattr(Endpoints, 'delivered_orders', None))
 
     def test_service_properties_exist(self):
         """Test that all service properties are available on RohlikAPI."""

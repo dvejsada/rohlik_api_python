@@ -79,3 +79,115 @@ class ProductService(BaseService):
         except httpx.HTTPError as err:
             _LOGGER.error(f"Request failed: {err}")
             return None
+
+    async def get_ai_summary(self, product_id: int) -> Optional[Dict[str, Any]]:
+        """Get AI-generated summary for a product.
+
+        Args:
+            product_id: The ID of the product
+
+        Returns:
+            dict: AI summary with title and content, or None if request fails
+        """
+        await self._ensure_logged_in()
+
+        try:
+            url = Endpoints.product_ai_summary(product_id)
+            response = await self._http.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            return {
+                "product_id": data.get("productId"),
+                "rating": data.get("rating"),
+                "title": data.get("title"),
+                "content": data.get("content"),
+            }
+
+        except httpx.HTTPError as err:
+            _LOGGER.error(f"Error fetching AI summary for product {product_id}: {err}")
+            return None
+
+    async def get_composition(self, product_id: int) -> Optional[Dict[str, Any]]:
+        """Get composition and nutritional values for a product.
+
+        Args:
+            product_id: The ID of the product
+
+        Returns:
+            dict: Product composition including nutritional values, ingredients, and allergens
+        """
+        await self._ensure_logged_in()
+
+        try:
+            url = Endpoints.product_composition(product_id)
+            response = await self._http.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            # Parse nutritional values
+            nutritional_values = []
+            for nv in data.get("nutritionalValues", []):
+                values = nv.get("values", {})
+                nutritional_values.append({
+                    "portion": nv.get("portion"),
+                    "energy_kj": values.get("energyKJ", {}).get("amount"),
+                    "energy_kcal": values.get("energyKCal", {}).get("amount"),
+                    "fats": values.get("fats", {}).get("amount"),
+                    "saturated_fats": values.get("saturatedFats", {}).get("amount"),
+                    "carbohydrates": values.get("carbohydrates", {}).get("amount"),
+                    "sugars": values.get("sugars", {}).get("amount"),
+                    "protein": values.get("protein", {}).get("amount"),
+                    "salt": values.get("salt", {}).get("amount"),
+                    "fiber": values.get("fiber", {}).get("amount"),
+                })
+
+            # Parse allergens
+            allergens_data = data.get("allergens", {})
+
+            return {
+                "product_id": data.get("productId"),
+                "nutritional_values": nutritional_values,
+                "ingredients": data.get("plainIngredients"),
+                "allergens": {
+                    "contained": allergens_data.get("contained", []),
+                    "possibly_contained": allergens_data.get("possiblyContained", []),
+                },
+            }
+
+        except httpx.HTTPError as err:
+            _LOGGER.error(f"Error fetching composition for product {product_id}: {err}")
+            return None
+
+    async def get_price(self, product_id: int) -> Optional[Dict[str, Any]]:
+        """Get current price for a product.
+
+        Args:
+            product_id: The ID of the product
+
+        Returns:
+            dict: Product price information including price per unit and sales
+        """
+        await self._ensure_logged_in()
+
+        try:
+            url = Endpoints.product_price(product_id)
+            response = await self._http.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            price = data.get("price", {})
+            price_per_unit = data.get("pricePerUnit", {})
+
+            return {
+                "product_id": data.get("productId"),
+                "price": price.get("amount"),
+                "currency": price.get("currency"),
+                "price_per_unit": price_per_unit.get("amount"),
+                "sales": data.get("sales", []),
+            }
+
+        except httpx.HTTPError as err:
+            _LOGGER.error(f"Error fetching price for product {product_id}: {err}")
+            return None
+

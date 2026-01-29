@@ -35,9 +35,6 @@ class TestEndpointsConstants:
         """Test NEXT_ORDER endpoint."""
         assert Endpoints.NEXT_ORDER == "/api/v3/orders/upcoming"
 
-    def test_delivered_orders_endpoint(self):
-        """Test DELIVERED_ORDERS endpoint."""
-        assert Endpoints.DELIVERED_ORDERS == "/api/v3/orders/delivered"
 
     def test_premium_profile_endpoint(self):
         """Test PREMIUM_PROFILE endpoint."""
@@ -104,20 +101,26 @@ class TestEndpointsCompleteness:
     def test_all_product_endpoints_exist(self):
         """Test all product endpoints exist."""
         assert hasattr(Endpoints, 'SEARCH')
-        assert hasattr(Endpoints, 'SHOPPING_LIST')
+        # These are now classmethod builders
+        assert callable(getattr(Endpoints, 'product_ai_summary', None))
+        assert callable(getattr(Endpoints, 'product_composition', None))
+        assert callable(getattr(Endpoints, 'product_price', None))
+        assert callable(getattr(Endpoints, 'shopping_list', None))
 
     def test_all_delivery_endpoints_exist(self):
         """Test all delivery endpoints exist."""
         assert hasattr(Endpoints, 'DELIVERY')
         assert hasattr(Endpoints, 'TIMESLOT_RESERVATION')
-        assert hasattr(Endpoints, 'TIMESLOTS_BASE')
         assert hasattr(Endpoints, 'DELIVERY_ANNOUNCEMENTS')
+        # timeslots is now a classmethod builder
+        assert callable(getattr(Endpoints, 'timeslots', None))
 
     def test_all_order_endpoints_exist(self):
         """Test all order endpoints exist."""
         assert hasattr(Endpoints, 'NEXT_ORDER')
         assert hasattr(Endpoints, 'LAST_ORDER')
-        assert hasattr(Endpoints, 'DELIVERED_ORDERS')
+        # delivered_orders is now a classmethod builder
+        assert callable(getattr(Endpoints, 'delivered_orders', None))
 
     def test_all_account_endpoints_exist(self):
         """Test all account endpoints exist."""
@@ -127,9 +130,10 @@ class TestEndpointsCompleteness:
 
     def test_all_recipe_endpoints_exist(self):
         """Test all recipe endpoints exist."""
-        assert hasattr(Endpoints, 'RECIPE_SEARCH')
-        assert hasattr(Endpoints, 'RECIPE_DETAIL')
         assert hasattr(Endpoints, 'INGREDIENT_PRODUCTS')
+        # These are now classmethod builders
+        assert callable(getattr(Endpoints, 'recipe_search', None))
+        assert callable(getattr(Endpoints, 'recipe_detail', None))
 
 
 class TestEndpointsRecipeBuilders:
@@ -152,4 +156,27 @@ class TestEndpointsRecipeBuilders:
         result = Endpoints.recipe_detail(59)
         assert "/59" in result
         assert "recipe" in result
+
+
+class TestEndpointsProductBuilders:
+    """Tests for product endpoint builder methods."""
+
+    def test_product_ai_summary_builder(self):
+        """Test product_ai_summary endpoint builder."""
+        result = Endpoints.product_ai_summary(1384964)
+        assert "/1384964/" in result
+        assert "ai-summary" in result
+
+    def test_product_composition_builder(self):
+        """Test product_composition endpoint builder."""
+        result = Endpoints.product_composition(1425155)
+        assert "/1425155/" in result
+        assert "composition" in result
+
+    def test_product_price_builder(self):
+        """Test product_price endpoint builder."""
+        result = Endpoints.product_price(1425155)
+        assert "/1425155/" in result
+        assert "prices" in result
+
 
