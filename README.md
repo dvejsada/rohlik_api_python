@@ -269,22 +269,3 @@ MIT License - see LICENSE file for details.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Changelog
-
-### 0.2.0 (2026-01-29)
-
-- **Breaking Change**: Refactored to service-based architecture
-- New services: `cart`, `products`, `orders`, `delivery`, `account`, `recipes`
-- Added Recipe service for Rohlík Chef (search, details, ingredient products)
-- Added Product details: AI summary, composition, price endpoints
-- Removed legacy methods in favor of service-based API
-- Improved code organization and maintainability
-
-### 0.1.0 (2026-01-08)
-
-- Initial release
-- Async API client with HTTP/2 support
-- Authentication with persistent sessions
-- Product search, cart management, and delivery information
-- Context manager support
