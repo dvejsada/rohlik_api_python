@@ -182,23 +182,6 @@ all_data = await client.get_data()
 # Returns dict with: login, delivery, next_order, last_order, cart, premium_profile, etc.
 ```
 
-## Error Handling
-
-```python
-from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError, RohlikAPIError
-
-async def main():
-    try:
-        async with RohlikAPI(username="email@example.com", password="password") as client:
-            cart = await client.cart.get_content()
-    except InvalidCredentialsError as e:
-        print(f"Invalid credentials: {e}")
-    except APIRequestFailedError as e:
-        print(f"API request failed: {e}")
-    except RohlikAPIError as e:
-        print(f"General API error: {e}")
-```
-
 ## Advanced Usage
 
 ### Manual Session Management
@@ -219,48 +202,6 @@ async def main():
     finally:
         await client.close()
 ```
-
-### Access Low-Level Components
-
-```python
-from rohlik_api import HttpClient, AuthManager, Endpoints
-
-# Use Endpoints for URL building
-url = Endpoints.product_price(1425155)
-url = Endpoints.recipe_search("polévka", limit=5)
-url = Endpoints.delivered_orders(limit=10, offset=0)
-```
-
-## Development
-
-### Setup Development Environment
-
-```bash
-# Clone the repository
-git clone https://github.com/dvejsada/rohlik_api_python.git
-cd rohlik_api_python
-
-# Install development dependencies
-pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
-pytest
-```
-
-### Code Formatting
-
-```bash
-black rohlik_api
-ruff check rohlik_api
-```
-
-## Requirements
-
-- Python >= 3.8
-- httpx[http2] >= 0.24.0
 
 ## License
 

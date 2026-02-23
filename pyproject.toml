@@ -11,7 +11,7 @@ requires-python = ">=3.8"
 license = {text = "MIT"}
 license-files = ["LICENSE"]
 authors = [
-    {name = "george", email = "noreply@github.com"}
+    {name = "Daniel Vejsada", email = "noreply@github.com"}
 ]
 keywords = ["rohlik", "api", "client", "grocery"]
 classifiers = [
