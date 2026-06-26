@@ -67,12 +67,12 @@ class TestRecipeServiceSearch:
         result = await service.search("rajská")
 
         assert result is not None
-        assert len(result["recipes"]) == 2
-        assert result["total_hits"] == 2
-        assert result["recipes"][0]["id"] == 59
-        assert result["recipes"][0]["name"] == "Rajská omáčka s hovězím masem"
-        assert result["recipes"][0]["is_new"] is True
-        assert result["recipes"][1]["is_favorite"] is True
+        assert len(result.recipes) == 2
+        assert result.total_hits == 2
+        assert result.recipes[0].id == 59
+        assert result.recipes[0].name == "Rajská omáčka s hovězím masem"
+        assert result.recipes[0].is_new is True
+        assert result.recipes[1].is_favorite is True
 
     @pytest.mark.asyncio
     async def test_search_returns_none_on_error(self, mock_http, mock_auth):
@@ -156,15 +156,15 @@ class TestRecipeServiceGetDetail:
         result = await service.get_detail(59)
 
         assert result is not None
-        assert result["id"] == 59
-        assert result["name"] == "Rajská omáčka s hovězím masem"
-        assert result["duration"] == "Do hodinky"
-        assert result["author"]["name"] == "Roman Vaněk"
-        assert len(result["tips"]) == 2
-        assert len(result["ingredients"]) == 1
-        assert result["ingredients"][0]["items"][0]["ingredient_id"] == 56
-        assert len(result["directions"]) == 1
-        assert len(result["directions"][0]["steps"]) == 2
+        assert result.id == 59
+        assert result.name == "Rajská omáčka s hovězím masem"
+        assert result.duration == "Do hodinky"
+        assert result.author.name == "Roman Vaněk"
+        assert len(result.tips) == 2
+        assert len(result.ingredients) == 1
+        assert result.ingredients[0].items[0].ingredient_id == 56
+        assert len(result.directions) == 1
+        assert len(result.directions[0].steps) == 2
 
     @pytest.mark.asyncio
     async def test_get_detail_returns_none_on_error(self, mock_http, mock_auth):
@@ -226,13 +226,13 @@ class TestRecipeServiceGetIngredientProducts:
         result = await service.get_ingredient_products([102])
 
         assert result is not None
-        assert len(result["ingredients"]) == 1
-        assert result["ingredients"][0]["ingredient_id"] == 102
-        assert len(result["ingredients"][0]["products"]) == 2
-        assert result["ingredients"][0]["products"][0]["product_id"] == 1350675
-        assert result["ingredients"][0]["products"][0]["price"] == "41.88 Kč"
-        assert result["ingredients"][0]["products"][0]["in_stock"] is True
-        assert result["ingredients"][0]["products"][0]["is_favorite"] is True
+        assert len(result.ingredients) == 1
+        assert result.ingredients[0].ingredient_id == 102
+        assert len(result.ingredients[0].products) == 2
+        assert result.ingredients[0].products[0].product_id == 1350675
+        assert result.ingredients[0].products[0].price == "41.88 Kč"
+        assert result.ingredients[0].products[0].in_stock is True
+        assert result.ingredients[0].products[0].is_favorite is True
 
     @pytest.mark.asyncio
     async def test_get_ingredient_products_sends_correct_payload(self, mock_http, mock_auth):

@@ -27,8 +27,8 @@ async def main() -> None:
         # --- Products ------------------------------------------------------
         results = await client.products.search("mleko", limit=5)
         if results:
-            for product in results["search_results"]:
-                print(f"  {product['name']} - {product['price']}")
+            for product in results.results:
+                print(f"  {product.name} - {product.price}")
 
         # composition = await client.products.get_composition(product_id=1425155)
         # price = await client.products.get_price(product_id=1425155)
@@ -36,11 +36,11 @@ async def main() -> None:
 
         # --- Cart ----------------------------------------------------------
         cart = await client.cart.get_content()
-        print(f"Cart total: {cart['total_price']} ({cart['total_items']} items)")
+        print(f"Cart total: {cart.total_price} ({cart.total_items} items)")
 
         # await client.cart.add_items([{"product_id": 1234567, "quantity": 2}])
-        # if cart["products"]:
-        #     await client.cart.delete_item(cart["products"][0]["cart_item_id"])
+        # if cart.products:
+        #     await client.cart.delete_item(cart.products[0].cart_item_id)
 
         # --- Delivery & orders --------------------------------------------
         # delivery = await client.delivery.get_info()
@@ -56,7 +56,7 @@ async def main() -> None:
         # --- Recipes (Rohlík Chef) ----------------------------------------
         recipes = await client.recipes.search("rajská", limit=5)
         if recipes:
-            print(f"Found {recipes['total_hits']} recipes")
+            print(f"Found {recipes.total_hits} recipes")
         # detail = await client.recipes.get_detail(recipe_id=59)
         # products = await client.recipes.get_ingredient_products([102, 56], limit=5)
 
@@ -70,7 +70,7 @@ async def manual_session() -> None:
     try:
         await client.login()
         cart = await client.cart.get_content()
-        print(f"Cart total: {cart['total_price']}")
+        print(f"Cart total: {cart.total_price}")
         await client.logout()
     finally:
         await client.close()

@@ -7,7 +7,7 @@ name = "rohlik-api"
 dynamic = ["version"]
 description = "Async Python client for the Rohlik.cz API"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -19,8 +19,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Framework :: AsyncIO",
@@ -57,11 +55,11 @@ rohlik_api = ["py.typed"]
 
 [tool.black]
 line-length = 100
-target-version = ["py311", "py312", "py313"]
+target-version = ["py313"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
@@ -79,7 +77,7 @@ ignore = []
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

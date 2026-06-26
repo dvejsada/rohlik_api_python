@@ -101,11 +101,11 @@ class TestCartService:
         service = CartService(mock_http, mock_auth)
         result = await service.get_content()
 
-        assert result["total_price"] == 99.90
-        assert result["total_items"] == 1
-        assert result["can_make_order"] is True
-        assert len(result["products"]) == 1
-        assert result["products"][0]["name"] == "Test Product"
+        assert result.total_price == 99.90
+        assert result.total_items == 1
+        assert result.can_make_order is True
+        assert len(result.products) == 1
+        assert result.products[0].name == "Test Product"
 
     @pytest.mark.asyncio
     async def test_add_items_sends_correct_payload(self, mock_http, mock_auth):
@@ -118,7 +118,7 @@ class TestCartService:
         products = [{"product_id": 123, "quantity": 2}]
         result = await service.add_items(products)
 
-        assert 123 in result["added_products"]
+        assert 123 in result
         mock_http.post.assert_called()
 
 
@@ -131,8 +131,8 @@ class TestProductService:
         assert isinstance(service, BaseService)
 
     @pytest.mark.asyncio
-    async def test_search_returns_none_when_no_products(self, mock_http, mock_auth):
-        """Test search returns None when no products found."""
+    async def test_search_returns_empty_when_no_products(self, mock_http, mock_auth):
+        """Test search returns empty results when no products found."""
         mock_response = MagicMock()
         mock_response.json.return_value = {"data": {"productList": []}}
         mock_response.raise_for_status = MagicMock()
@@ -140,6 +140,19 @@ class TestProductService:
 
         service = ProductService(mock_http, mock_auth)
         result = await service.search("nonexistent")
+
+        assert result is not None
+        assert result.results == []
+
+    @pytest.mark.asyncio
+    async def test_search_returns_none_on_error(self, mock_http, mock_auth):
+        """Test search returns None when the request fails."""
+        import httpx
+
+        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.search("test")
 
         assert result is None
 
@@ -171,8 +184,8 @@ class TestProductService:
         service = ProductService(mock_http, mock_auth)
         result = await service.search("test")
 
-        assert len(result["search_results"]) == 1
-        assert result["search_results"][0]["name"] == "Regular"
+        assert len(result.results) == 1
+        assert result.results[0].name == "Regular"
 
     @pytest.mark.asyncio
     async def test_get_ai_summary_returns_data(self, mock_http, mock_auth):
@@ -191,9 +204,9 @@ class TestProductService:
         result = await service.get_ai_summary(1384964)
 
         assert result is not None
-        assert result["product_id"] == 1384964
-        assert result["title"] == "AI Souhrn"
-        assert "vepřová panenka" in result["content"]
+        assert result.product_id == 1384964
+        assert result.title == "AI Souhrn"
+        assert "vepřová panenka" in result.content
 
     @pytest.mark.asyncio
     async def test_get_ai_summary_returns_none_on_error(self, mock_http, mock_auth):
@@ -242,13 +255,13 @@ class TestProductService:
         result = await service.get_composition(1425155)
 
         assert result is not None
-        assert result["product_id"] == 1425155
-        assert len(result["nutritional_values"]) == 1
-        assert result["nutritional_values"][0]["energy_kcal"] == 313.0
-        assert result["nutritional_values"][0]["protein"] == 9.6
-        assert "PŠENIČNÁ mouka" in result["ingredients"]
-        assert "Obiloviny obsahující lepek" in result["allergens"]["contained"]
-        assert "Mléko" in result["allergens"]["possibly_contained"]
+        assert result.product_id == 1425155
+        assert len(result.nutritional_values) == 1
+        assert result.nutritional_values[0].energy_kcal == 313.0
+        assert result.nutritional_values[0].protein == 9.6
+        assert "PŠENIČNÁ mouka" in result.ingredients
+        assert "Obiloviny obsahující lepek" in result.allergens.contained
+        assert "Mléko" in result.allergens.possibly_contained
 
     @pytest.mark.asyncio
     async def test_get_composition_returns_none_on_error(self, mock_http, mock_auth):
@@ -279,11 +292,11 @@ class TestProductService:
         result = await service.get_price(1425155)
 
         assert result is not None
-        assert result["product_id"] == 1425155
-        assert result["price"] == 40.9
-        assert result["currency"] == "CZK"
-        assert result["price_per_unit"] == 340.83
-        assert result["sales"] == []
+        assert result.product_id == 1425155
+        assert result.price == 40.9
+        assert result.currency == "CZK"
+        assert result.price_per_unit == 340.83
+        assert result.sales == []
 
     @pytest.mark.asyncio
     async def test_get_price_returns_none_on_error(self, mock_http, mock_auth):
@@ -400,5 +413,5 @@ class TestAccountService:
         service = AccountService(mock_http, mock_auth)
         result = await service.get_shopping_list("list_123")
 
-        assert result["name"] == "My List"
-        assert len(result["products_in_list"]) == 1
+        assert result.name == "My List"
+        assert len(result.products_in_list) == 1

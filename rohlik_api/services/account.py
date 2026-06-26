@@ -9,6 +9,7 @@ import httpx
 
 from ..endpoints import Endpoints
 from ..errors import APIRequestFailedError
+from ..models import ShoppingList
 from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,18 +42,18 @@ class AccountService(BaseService):
         """
         return await self._fetch_endpoint(Endpoints.ANNOUNCEMENTS, "announcements")
 
-    async def get_shopping_list(self, shopping_list_id: str) -> dict[str, Any]:
+    async def get_shopping_list(self, shopping_list_id: str) -> ShoppingList:
         """Retrieve a shopping list by its ID.
 
         Args:
-            shopping_list_id: The ID of the shopping list to retrieve
+            shopping_list_id: The ID of the shopping list to retrieve.
 
         Returns:
-            dict: The shopping list details with 'name' and 'products_in_list' keys
+            A ShoppingList with its name and products.
 
         Raises:
-            ValueError: If shopping_list_id is not provided
-            APIRequestFailedError: If the request fails
+            ValueError: If shopping_list_id is not provided.
+            APIRequestFailedError: If the request fails.
         """
         if not shopping_list_id:
             raise ValueError("Missing argument - shopping list id")
@@ -64,13 +65,7 @@ class AccountService(BaseService):
         try:
             response = await self._http.get(url)
             response.raise_for_status()
-            search_data = response.json()
-
-            return {
-                "name": search_data.get("name"),
-                "products_in_list": search_data.get("products", []),
-            }
-
+            return ShoppingList.from_api(response.json())
         except httpx.HTTPError as err:
             _LOGGER.error("Request failed: %s", err)
             raise APIRequestFailedError(f"Request failed: {err}") from err

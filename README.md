@@ -7,13 +7,14 @@ An async Python client library for interacting with the Rohlik.cz API using http
 - 🚀 HTTP/2 support for improved performance
 - 🔐 Secure authentication with automatic session management
 - 🎯 Clean service-based API architecture
+- 🧩 Typed dataclass models for all parsed responses (fully type-hinted, `py.typed`)
 - 🔄 Async context manager support
 - 🍳 Recipe search and ingredient products (Rohlík Chef)
 - 📦 Product details, composition, and AI summaries
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.13+
 - [httpx](https://www.python-httpx.org/) with HTTP/2 support (installed automatically)
 
 > **Disclaimer:** This is an unofficial client for the non-public Rohlik.cz API
@@ -34,24 +35,43 @@ from rohlik_api import RohlikAPI
 
 async def main():
     async with RohlikAPI(username="your_email@example.com", password="your_password") as client:
-        # Search for products
+        # Search for products (returns a SearchResults model)
         results = await client.products.search("mleko", limit=5)
-        print(f"Search results: {results}")
-        
-        # Get cart contents
+        for product in results.results:
+            print(f"{product.name} - {product.price}")
+
+        # Get cart contents (returns a Cart model)
         cart = await client.cart.get_content()
-        print(f"Cart: {cart}")
-        
-        # Get delivery information
-        delivery = await client.delivery.get_info()
-        print(f"Delivery: {delivery}")
-        
-        # Search recipes
+        print(f"Cart total: {cart.total_price} ({cart.total_items} items)")
+
+        # Search recipes (returns a RecipeSearchResults model)
         recipes = await client.recipes.search("rajská", limit=5)
-        print(f"Recipes: {recipes}")
+        print(f"Found {recipes.total_hits} recipes")
 
 asyncio.run(main())
 ```
+
+## Typed Models
+
+Service methods that parse responses return typed dataclasses (importable from
+`rohlik_api`) rather than raw dictionaries, so editors and type checkers know the
+shape of the data:
+
+```python
+from dataclasses import asdict
+from rohlik_api import Cart, SearchResults
+
+cart = await client.cart.get_content()   # -> Cart
+cart.total_price                         # float
+cart.products[0].name                    # str
+
+# Convert any model to a plain dict (e.g. for JSON / Home Assistant / MCP):
+asdict(cart)
+```
+
+Raw passthrough endpoints (`orders.*`, `delivery.*`, `account.get_premium_profile`,
+`account.get_bags_info`, `account.get_announcements`, and `get_data`) return the
+decoded JSON as `dict` / `list`, since they are not reshaped by the client.
 
 ## Configuration
 
@@ -88,37 +108,39 @@ The client provides access to functionality through service properties:
 ```python
 # Get cart contents
 cart = await client.cart.get_content()
-# Returns: {"total_price": 199.90, "total_items": 3, "can_make_order": True, "products": [...]}
+# -> Cart(total_price=199.90, total_items=3, can_make_order=True, products=[CartItem, ...])
 
 # Add items to cart
-result = await client.cart.add_items([
+added = await client.cart.add_items([
     {"product_id": 123456, "quantity": 2},
     {"product_id": 789012, "quantity": 1}
 ])
-# Returns: {"added_products": [123456, 789012]}
+# -> [123456, 789012]   (list of product IDs successfully added)
 
-# Delete item from cart
+# Delete item from cart (raises APIRequestFailedError on failure)
 await client.cart.delete_item(order_field_id="abc123")
 ```
 
 ### Products Service (`client.products`)
 
 ```python
-# Search for products
+# Search for products -> SearchResults | None (None only on request failure)
 results = await client.products.search("mléko", limit=10, favourite=False)
-# Returns: {"search_results": [{"id": 123, "name": "...", "price": "29.90 Kč", ...}]}
+for product in results.results:  # ProductSearchResult: id, name, price, brand, amount
+    print(product.name, product.price)
 
-# Get AI-generated product summary
+# Get AI-generated product summary -> AISummary | None
 summary = await client.products.get_ai_summary(product_id=1384964)
-# Returns: {"product_id": 1384964, "title": "AI Souhrn", "content": "..."}
+# AISummary(product_id=1384964, rating=..., title="AI Souhrn", content="...")
 
-# Get product composition (nutritional values, allergens)
+# Get product composition -> ProductComposition | None
 composition = await client.products.get_composition(product_id=1425155)
-# Returns: {"nutritional_values": [...], "ingredients": "...", "allergens": {...}}
+# ProductComposition(product_id, nutritional_values=[NutritionalValue, ...],
+#                    ingredients="...", allergens=Allergens(contained, possibly_contained))
 
-# Get product price
+# Get product price -> ProductPrice | None
 price = await client.products.get_price(product_id=1425155)
-# Returns: {"product_id": 1425155, "price": 40.9, "currency": "CZK", "price_per_unit": 340.83}
+# ProductPrice(product_id=1425155, price=40.9, currency="CZK", price_per_unit=340.83, sales=[])
 ```
 
 ### Orders Service (`client.orders`)
@@ -162,9 +184,9 @@ bags = await client.account.get_bags_info()
 # Get announcements
 announcements = await client.account.get_announcements()
 
-# Get shopping list by ID
+# Get shopping list by ID -> ShoppingList
 shopping_list = await client.account.get_shopping_list("list_id_here")
-# Returns: {"name": "My List", "products_in_list": [...]}
+# ShoppingList(name="My List", products_in_list=[...])
 ```
 
 ### Recipes Service (`client.recipes`)
@@ -172,15 +194,16 @@ shopping_list = await client.account.get_shopping_list("list_id_here")
 ```python
 # Search for recipes
 recipes = await client.recipes.search("rajská", limit=10, offset=0)
-# Returns: {"recipes": [{"id": 59, "name": "Rajská omáčka", "image": "...", ...}], "total_hits": 4}
+# -> RecipeSearchResults(recipes=[RecipeSummary, ...], total_hits=4)
 
-# Get recipe details
+# Get recipe details -> RecipeDetail | None
 recipe = await client.recipes.get_detail(recipe_id=59)
-# Returns: {"id": 59, "name": "...", "ingredients": [...], "directions": [...], ...}
+# RecipeDetail(id=59, name="...", ingredients=[IngredientGroup, ...],
+#              directions=[DirectionSection, ...], author=RecipeAuthor, ...)
 
-# Get products for ingredients
+# Get products for ingredients -> IngredientProducts | None
 products = await client.recipes.get_ingredient_products(ingredient_ids=[102, 56], limit=5)
-# Returns: {"ingredients": [{"ingredient_id": 102, "products": [...], "total_hits": 3}]}
+# IngredientProducts(ingredients=[IngredientProductGroup(ingredient_id, products, total_hits)])
 ```
 
 ### Aggregated Data
