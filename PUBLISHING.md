@@ -110,15 +110,15 @@ Configure Trusted Publishing on PyPI:
 
 When releasing a new version:
 
-1. Update version in `pyproject.toml`
-2. Update version in `rohlik_api/__init__.py`
-3. Update CHANGELOG in README.md
-4. Create a git tag:
+1. Bump `__version__` in `rohlik_api/__init__.py` (this is the single source of
+   truth — `pyproject.toml` reads it dynamically).
+2. Create a git tag:
    ```bash
    git tag v0.1.1
    git push origin v0.1.1
    ```
-5. Build and publish the new version
+3. Build and publish the new version (or let the GitHub Actions release workflow
+   do it).
 
 ## Verification
 

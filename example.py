@@ -1,215 +1,85 @@
-"""Example usage of the Rohlik API client."""
+"""Example usage of the Rohlik API client.
+
+Replace USERNAME and PASSWORD with your real Rohlik.cz credentials and run:
+
+    python example.py
+
+The network calls are commented out so the file runs without credentials.
+Uncomment the blocks you want to exercise once you have set your credentials.
+"""
 
 import asyncio
-from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError
+
+from rohlik_api import APIRequestFailedError, InvalidCredentialsError, RohlikAPI
+
+USERNAME = "your_email@example.com"
+PASSWORD = "your_password"
 
 
-async def main():
-    """Demonstrate basic usage of the Rohlik API client."""
-    print("Rohlik API Client Example")
-    print("=" * 60)
+async def main() -> None:
+    """Demonstrate the service-based API of the Rohlik client."""
+    # The recommended pattern: an async context manager with auto-login.
+    # On entry it logs in; on exit it logs out and releases resources.
+    async with RohlikAPI(username=USERNAME, password=PASSWORD) as client:
+        print(f"Logged in: {client.is_logged_in}")
+        print(f"User ID: {client.user_id}, Address ID: {client.address_id}")
 
-    # Replace with your actual credentials
-    USERNAME = "your_email@example.com"
-    PASSWORD = "your_password"
+        # --- Products ------------------------------------------------------
+        results = await client.products.search("mleko", limit=5)
+        if results:
+            for product in results["search_results"]:
+                print(f"  {product['name']} - {product['price']}")
 
-    # -------------------------------------------------------------------------
-    # Example 1: Using async context manager (recommended)
-    # -------------------------------------------------------------------------
-    print("\n[Example 1] Using async context manager with auto-login")
-    print("-" * 60)
+        # composition = await client.products.get_composition(product_id=1425155)
+        # price = await client.products.get_price(product_id=1425155)
+        # summary = await client.products.get_ai_summary(product_id=1384964)
 
-    # For demo purposes, we disable auto_login. In real usage, omit auto_login=False
-    async with RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False) as client:
-        print(f"Client initialized with base URL: {client.base_url}")
-        print(f"Is logged in: {client.is_logged_in}")  # False because auto_login=False
+        # --- Cart ----------------------------------------------------------
+        cart = await client.cart.get_content()
+        print(f"Cart total: {cart['total_price']} ({cart['total_items']} items)")
 
-        # With real credentials, use auto_login=True (default):
-        # async with RohlikAPI(username=USERNAME, password=PASSWORD) as client:
-        #     # client.is_logged_in is True - auto-login happened!
-        #
-        #     # Get cart contents
-        #     cart = await client.get_cart_content()
-        #     print(f"Cart total: {cart['total_price']} CZK")
-        #     print(f"Items in cart: {cart['total_items']}")
-        #
-        #     # Get delivery information
-        #     delivery = await client.get_delivery_info()
-        #     print(f"Delivery info: {delivery}")
-        #
-        #     # Search for products
-        #     results = await client.search_product("mleko", limit=5)
-        #     if results:
-        #         print(f"Found {len(results['search_results'])} products:")
-        #         for product in results['search_results']:
-        #             print(f"  - {product['name']} ({product['price']})")
+        # await client.cart.add_items([{"product_id": 1234567, "quantity": 2}])
+        # if cart["products"]:
+        #     await client.cart.delete_item(cart["products"][0]["cart_item_id"])
 
-        print("(Requires valid credentials to run)")
-        # Logout is called automatically when exiting the context manager
+        # --- Delivery & orders --------------------------------------------
+        # delivery = await client.delivery.get_info()
+        # slots = await client.delivery.get_next_slots()
+        # next_order = await client.orders.get_next()
+        # history = await client.orders.get_delivered(limit=10)
 
-    # -------------------------------------------------------------------------
-    # Example 2: Get all account data at once
-    # -------------------------------------------------------------------------
-    print("\n[Example 2] Get all account data at once")
-    print("-" * 60)
+        # --- Account -------------------------------------------------------
+        # premium = await client.account.get_premium_profile()
+        # bags = await client.account.get_bags_info()
+        # shopping_list = await client.account.get_shopping_list("list-id")
 
-    async with RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False) as client:
-        # Uncomment to test with real credentials:
-        # try:
-        #     # get_data() fetches everything (login already done automatically)
-        #     data = await client.get_data()
-        #     print(f"Login status: {data.get('login', {}).get('status')}")
-        #     print(f"Cart: {data.get('cart')}")
-        #     print(f"Delivery: {data.get('delivery')}")
-        #     print(f"Next order: {data.get('next_order')}")
-        #     print(f"Premium profile: {data.get('premium_profile')}")
-        # except Exception as e:
-        #     print(f"Error: {e}")
+        # --- Recipes (Rohlík Chef) ----------------------------------------
+        recipes = await client.recipes.search("rajská", limit=5)
+        if recipes:
+            print(f"Found {recipes['total_hits']} recipes")
+        # detail = await client.recipes.get_detail(recipe_id=59)
+        # products = await client.recipes.get_ingredient_products([102, 56], limit=5)
 
-        print("get_data() fetches all account data in one call")
-        print("(Requires valid credentials to run)")
+        # --- Aggregated snapshot ------------------------------------------
+        # all_data = await client.get_data()
 
-    # -------------------------------------------------------------------------
-    # Example 3: Cart operations
-    # -------------------------------------------------------------------------
-    print("\n[Example 3] Cart operations")
-    print("-" * 60)
 
-    async with RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False) as client:
-        # Uncomment to test with real credentials:
-        # # Add products to cart
-        # products_to_add = [
-        #     {"product_id": 1234567, "quantity": 2},
-        #     {"product_id": 7654321, "quantity": 1}
-        # ]
-        # result = await client.add_to_cart(products_to_add)
-        # print(f"Added products: {result['added_products']}")
-        #
-        # # Get current cart
-        # cart = await client.get_cart_content()
-        # for product in cart['products']:
-        #     print(f"  - {product['name']}: {product['quantity']}x ({product['price']} CZK)")
-        #
-        # # Delete item from cart (using cart_item_id from get_cart_content)
-        # if cart['products']:
-        #     item_to_delete = cart['products'][0]['cart_item_id']
-        #     await client.delete_from_cart(item_to_delete)
-        #     print(f"Deleted item: {item_to_delete}")
-
-        print("Cart operations: add_to_cart(), get_cart_content(), delete_from_cart()")
-        print("(Requires valid credentials to run)")
-
-    # -------------------------------------------------------------------------
-    # Example 4: Delivery and orders
-    # -------------------------------------------------------------------------
-    print("\n[Example 4] Delivery and orders")
-    print("-" * 60)
-
-    async with RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False) as client:
-        # Uncomment to test with real credentials:
-        # # Get delivery info
-        # delivery = await client.get_delivery_info()
-        # print(f"Delivery info: {delivery}")
-        #
-        # # Get timeslot reservation
-        # timeslot = await client.get_timeslot_reservation()
-        # print(f"Timeslot: {timeslot}")
-        #
-        # # Get next upcoming order
-        # next_order = await client.get_next_order()
-        # print(f"Next order: {next_order}")
-        #
-        # # Get last delivered order
-        # last_order = await client.get_last_order()
-        # print(f"Last order: {last_order}")
-        #
-        # # Get history of delivered orders
-        # orders = await client.get_delivered_orders(limit=10)
-        # print(f"Delivered orders count: {len(orders) if orders else 0}")
-
-        print("Delivery methods: get_delivery_info(), get_timeslot_reservation()")
-        print("Order methods: get_next_order(), get_last_order(), get_delivered_orders()")
-        print("(Requires valid credentials to run)")
-
-    # -------------------------------------------------------------------------
-    # Example 5: Account information
-    # -------------------------------------------------------------------------
-    print("\n[Example 5] Account information")
-    print("-" * 60)
-
-    async with RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False) as client:
-        # Uncomment to test with real credentials:
-        # # Get premium profile (Rohlik Premium subscription)
-        # premium = await client.get_premium_profile()
-        # print(f"Premium profile: {premium}")
-        #
-        # # Get reusable bags info
-        # bags = await client.get_bags_info()
-        # print(f"Bags info: {bags}")
-        #
-        # # Get announcements
-        # announcements = await client.get_announcements()
-        # print(f"Announcements: {announcements}")
-        #
-        # # Get delivery announcements
-        # delivery_announcements = await client.get_delivery_announcements()
-        # print(f"Delivery announcements: {delivery_announcements}")
-
-        print("Account methods: get_premium_profile(), get_bags_info()")
-        print("Announcement methods: get_announcements(), get_delivery_announcements()")
-        print("(Requires valid credentials to run)")
-
-    # -------------------------------------------------------------------------
-    # Example 6: Shopping lists
-    # -------------------------------------------------------------------------
-    print("\n[Example 6] Shopping lists")
-    print("-" * 60)
-
-    async with RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False) as client:
-        # Uncomment to test with real credentials:
-        # # Get a shopping list by ID
-        # shopping_list = await client.get_shopping_list("your-shopping-list-id")
-        # print(f"Shopping list: {shopping_list['name']}")
-        # print(f"Products: {shopping_list['products_in_list']}")
-
-        print("Shopping list methods: get_shopping_list(shopping_list_id)")
-        print("(Requires valid credentials to run)")
-
-    # -------------------------------------------------------------------------
-    # Example 7: Manual session management (without context manager)
-    # -------------------------------------------------------------------------
-    print("\n[Example 7] Manual session management (without context manager)")
-    print("-" * 60)
-
+async def manual_session() -> None:
+    """Demonstrate manual session management without the context manager."""
     client = RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False)
     try:
-        # Uncomment to test with real credentials:
-        # # When not using context manager, you must call login() manually
-        # await client.login()
-        # print(f"Logged in: {client.is_logged_in}")
-        #
-        # # Perform operations...
-        # cart = await client.get_cart_content()
-        #
-        # # Explicit logout when done
-        # await client.logout()
-        # print(f"Logged out: {not client.is_logged_in}")
-
-        print("Without context manager, call login() and logout() manually")
-        print("(Requires valid credentials to run)")
+        await client.login()
+        cart = await client.cart.get_content()
+        print(f"Cart total: {cart['total_price']}")
+        await client.logout()
     finally:
         await client.close()
 
-    # -------------------------------------------------------------------------
-    # Summary
-    # -------------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print("All examples completed!")
-    print("\nTo use this API client:")
-    print("1. Replace USERNAME and PASSWORD with your Rohlik.cz credentials")
-    print("2. Uncomment the example code sections you want to run")
-    print("3. Run: python example.py")
-
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except InvalidCredentialsError:
+        print("Invalid credentials - set USERNAME and PASSWORD in example.py")
+    except APIRequestFailedError as err:
+        print(f"Request failed: {err}")

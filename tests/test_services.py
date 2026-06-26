@@ -1,17 +1,18 @@
 """Tests for the service classes."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from rohlik_api.http_client import HttpClient
+import pytest
+
 from rohlik_api.auth import AuthManager
+from rohlik_api.http_client import HttpClient
 from rohlik_api.services import (
+    AccountService,
     BaseService,
     CartService,
-    ProductService,
-    OrderService,
     DeliveryService,
-    AccountService,
+    OrderService,
+    ProductService,
 )
 
 
@@ -87,11 +88,11 @@ class TestCartService:
                         "quantity": 2,
                         "price": 99.90,
                         "primaryCategoryName": "Food",
-                        "brand": "TestBrand"
+                        "brand": "TestBrand",
                     }
                 },
                 "totalPrice": 99.90,
-                "submitConditionPassed": True
+                "submitConditionPassed": True,
             }
         }
         mock_response.raise_for_status = MagicMock()
@@ -149,8 +150,18 @@ class TestProductService:
         mock_response.json.return_value = {
             "data": {
                 "productList": [
-                    {"productId": 1, "productName": "Regular", "badge": [], "price": {"full": 10, "currency": "Kč"}},
-                    {"productId": 2, "productName": "Promoted", "badge": [{"slug": "promoted"}], "price": {"full": 20, "currency": "Kč"}},
+                    {
+                        "productId": 1,
+                        "productName": "Regular",
+                        "badge": [],
+                        "price": {"full": 10, "currency": "Kč"},
+                    },
+                    {
+                        "productId": 2,
+                        "productName": "Promoted",
+                        "badge": [{"slug": "promoted"}],
+                        "price": {"full": 20, "currency": "Kč"},
+                    },
                 ]
             }
         }
@@ -171,7 +182,7 @@ class TestProductService:
             "productId": 1384964,
             "rating": "EMPTY",
             "title": "AI Souhrn",
-            "content": "Tato vepřová panenka je skvělá volba."
+            "content": "Tato vepřová panenka je skvělá volba.",
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.get.return_value = mock_response
@@ -188,6 +199,7 @@ class TestProductService:
     async def test_get_ai_summary_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_ai_summary returns None on error."""
         import httpx
+
         mock_http.get.side_effect = httpx.HTTPError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
@@ -213,15 +225,15 @@ class TestProductService:
                         "sugars": {"amount": 0.4, "unit": "g"},
                         "protein": {"amount": 9.6, "unit": "g"},
                         "salt": {"amount": 1.9, "unit": "g"},
-                        "fiber": {"amount": 0.0, "unit": "g"}
-                    }
+                        "fiber": {"amount": 0.0, "unit": "g"},
+                    },
                 }
             ],
             "plainIngredients": "PŠENIČNÁ mouka, voda, sůl",
             "allergens": {
                 "contained": ["Obiloviny obsahující lepek"],
-                "possiblyContained": ["Vejce", "Mléko"]
-            }
+                "possiblyContained": ["Vejce", "Mléko"],
+            },
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.get.return_value = mock_response
@@ -242,6 +254,7 @@ class TestProductService:
     async def test_get_composition_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_composition returns None on error."""
         import httpx
+
         mock_http.get.side_effect = httpx.HTTPError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
@@ -257,7 +270,7 @@ class TestProductService:
             "productId": 1425155,
             "price": {"amount": 40.9, "currency": "CZK"},
             "pricePerUnit": {"amount": 340.83, "currency": "CZK"},
-            "sales": []
+            "sales": [],
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.get.return_value = mock_response
@@ -276,6 +289,7 @@ class TestProductService:
     async def test_get_price_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_price returns None on error."""
         import httpx
+
         mock_http.get.side_effect = httpx.HTTPError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
@@ -378,7 +392,7 @@ class TestAccountService:
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "name": "My List",
-            "products": [{"productId": 123, "quantity": 2}]
+            "products": [{"productId": 123, "quantity": 2}],
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.get.return_value = mock_response

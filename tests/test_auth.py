@@ -1,8 +1,9 @@
 """Tests for the AuthManager class."""
 
 import pytest
-from rohlik_api.http_client import HttpClient
+
 from rohlik_api.auth import AuthManager
+from rohlik_api.http_client import HttpClient
 
 
 class TestAuthManagerInitialization:

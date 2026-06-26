@@ -1,7 +1,10 @@
 """Tests for the RohlikAPI client class."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError, mask_data
+
+from rohlik_api import RohlikAPI, mask_data
 
 # Test credentials used throughout tests
 TEST_USERNAME = "test@example.com"
@@ -72,7 +75,9 @@ class TestClientInitialization:
 
     def test_client_base_url_trailing_slash(self):
         """Test that trailing slash is removed from base URL."""
-        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, base_url="https://www.rohlik.cz/")
+        client = RohlikAPI(
+            username=TEST_USERNAME, password=TEST_PASSWORD, base_url="https://www.rohlik.cz/"
+        )
         assert client.base_url == "https://www.rohlik.cz"
 
 
@@ -82,7 +87,9 @@ class TestAsyncContextManager:
     @pytest.mark.asyncio
     async def test_async_context_manager(self):
         """Test client works as async context manager."""
-        async with RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False) as client:
+        async with RohlikAPI(
+            username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False
+        ) as client:
             assert client.base_url == "https://www.rohlik.cz"
 
     @pytest.mark.asyncio
@@ -149,6 +156,48 @@ class TestClientAuthentication:
             await client.account.get_shopping_list("")
         await client.close()
 
+    @pytest.mark.asyncio
+    async def test_login_delegates_to_auth(self):
+        """Test that client.login() delegates to the auth manager."""
+        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
+        client._auth.login = AsyncMock(return_value={"status": 200})
+
+        result = await client.login()
+
+        client._auth.login.assert_awaited_once()
+        assert result == {"status": 200}
+
+    @pytest.mark.asyncio
+    async def test_logout_delegates_to_auth(self):
+        """Test that client.logout() delegates to the auth manager."""
+        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
+        client._auth.logout = AsyncMock()
+
+        await client.logout()
+
+        client._auth.logout.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_context_manager_auto_login(self):
+        """Test that entering the context manager logs in when auto_login is True."""
+        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=True)
+        client._auth.login = AsyncMock(return_value={"status": 200})
+        client._auth.logout = AsyncMock()
+        client._http.close = AsyncMock()
+
+        async with client:
+            client._auth.login.assert_awaited_once()
+
+    def test_user_and_address_id_properties(self):
+        """Test that user_id and address_id properties expose auth state."""
+        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
+        assert client.user_id is None
+        assert client.address_id is None
+        client._auth._user_id = 111
+        client._auth._address_id = 222
+        assert client.user_id == 111
+        assert client.address_id == 222
+
 
 class TestClientEndpoints:
     """Tests for endpoint configuration."""
@@ -158,26 +207,25 @@ class TestClientEndpoints:
         from rohlik_api import Endpoints
 
         # Check that required endpoint constants exist
-        assert hasattr(Endpoints, 'DELIVERY')
-        assert hasattr(Endpoints, 'NEXT_ORDER')
-        assert hasattr(Endpoints, 'ANNOUNCEMENTS')
-        assert hasattr(Endpoints, 'BAGS')
-        assert hasattr(Endpoints, 'TIMESLOT_RESERVATION')
-        assert hasattr(Endpoints, 'LAST_ORDER')
-        assert hasattr(Endpoints, 'PREMIUM_PROFILE')
-        assert hasattr(Endpoints, 'DELIVERY_ANNOUNCEMENTS')
+        assert hasattr(Endpoints, "DELIVERY")
+        assert hasattr(Endpoints, "NEXT_ORDER")
+        assert hasattr(Endpoints, "ANNOUNCEMENTS")
+        assert hasattr(Endpoints, "BAGS")
+        assert hasattr(Endpoints, "TIMESLOT_RESERVATION")
+        assert hasattr(Endpoints, "LAST_ORDER")
+        assert hasattr(Endpoints, "PREMIUM_PROFILE")
+        assert hasattr(Endpoints, "DELIVERY_ANNOUNCEMENTS")
 
         # Check that builder methods exist
-        assert callable(getattr(Endpoints, 'timeslots', None))
-        assert callable(getattr(Endpoints, 'delivered_orders', None))
+        assert callable(getattr(Endpoints, "timeslots", None))
+        assert callable(getattr(Endpoints, "delivered_orders", None))
 
     def test_service_properties_exist(self):
         """Test that all service properties are available on RohlikAPI."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
-        assert hasattr(client, 'cart')
-        assert hasattr(client, 'products')
-        assert hasattr(client, 'orders')
-        assert hasattr(client, 'delivery')
-        assert hasattr(client, 'account')
-        assert hasattr(client, 'recipes')
-
+        assert hasattr(client, "cart")
+        assert hasattr(client, "products")
+        assert hasattr(client, "orders")
+        assert hasattr(client, "delivery")
+        assert hasattr(client, "account")
+        assert hasattr(client, "recipes")

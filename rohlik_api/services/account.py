@@ -1,13 +1,15 @@
 """Account service for Rohlik.cz API."""
 
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
 import httpx
 
-from .base import BaseService
 from ..endpoints import Endpoints
 from ..errors import APIRequestFailedError
+from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 class AccountService(BaseService):
     """Service for account-related operations."""
 
-    async def get_premium_profile(self) -> Optional[Dict[str, Any]]:
+    async def get_premium_profile(self) -> dict[str, Any] | None:
         """Get premium profile information.
 
         Returns:
@@ -23,7 +25,7 @@ class AccountService(BaseService):
         """
         return await self._fetch_endpoint(Endpoints.PREMIUM_PROFILE, "premium profile")
 
-    async def get_bags_info(self) -> Optional[Dict[str, Any]]:
+    async def get_bags_info(self) -> dict[str, Any] | None:
         """Get reusable bags user information.
 
         Returns:
@@ -31,7 +33,7 @@ class AccountService(BaseService):
         """
         return await self._fetch_endpoint(Endpoints.BAGS, "bags info")
 
-    async def get_announcements(self) -> Optional[Dict[str, Any]]:
+    async def get_announcements(self) -> dict[str, Any] | None:
         """Get top announcements.
 
         Returns:
@@ -39,7 +41,7 @@ class AccountService(BaseService):
         """
         return await self._fetch_endpoint(Endpoints.ANNOUNCEMENTS, "announcements")
 
-    async def get_shopping_list(self, shopping_list_id: str) -> Dict[str, Any]:
+    async def get_shopping_list(self, shopping_list_id: str) -> dict[str, Any]:
         """Retrieve a shopping list by its ID.
 
         Args:
@@ -66,9 +68,9 @@ class AccountService(BaseService):
 
             return {
                 "name": search_data.get("name"),
-                "products_in_list": search_data.get("products", [])
+                "products_in_list": search_data.get("products", []),
             }
 
         except httpx.HTTPError as err:
-            _LOGGER.error(f"Request failed: {err}")
-            raise APIRequestFailedError(f"Request failed: {err}")
+            _LOGGER.error("Request failed: %s", err)
+            raise APIRequestFailedError(f"Request failed: {err}") from err

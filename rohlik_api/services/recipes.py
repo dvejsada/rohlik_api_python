@@ -1,12 +1,15 @@
 """Recipe service for Rohlik.cz API."""
 
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import httpx
 
-from .base import BaseService
 from ..endpoints import Endpoints
+from ..helpers import format_price
+from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,12 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 class RecipeService(BaseService):
     """Service for recipe and ingredient operations (Rohlík Chef)."""
 
-    async def search(
-        self,
-        query: str,
-        limit: int = 10,
-        offset: int = 0
-    ) -> Optional[Dict[str, Any]]:
+    async def search(self, query: str, limit: int = 10, offset: int = 0) -> dict[str, Any] | None:
         """Search for recipes by name.
 
         Args:
@@ -54,14 +52,14 @@ class RecipeService(BaseService):
                     }
                     for meal in meals
                 ],
-                "total_hits": total_hits
+                "total_hits": total_hits,
             }
 
         except httpx.HTTPError as err:
             _LOGGER.error(f"Error searching recipes: {err}")
             return None
 
-    async def get_detail(self, recipe_id: int) -> Optional[Dict[str, Any]]:
+    async def get_detail(self, recipe_id: int) -> dict[str, Any] | None:
         """Get detailed information about a recipe.
 
         Args:
@@ -93,7 +91,7 @@ class RecipeService(BaseService):
                             "image": item.get("imgPath"),
                         }
                         for item in group.get("items", [])
-                    ]
+                    ],
                 }
                 ingredients.append(ingredient_group)
 
@@ -109,7 +107,7 @@ class RecipeService(BaseService):
                             "content": step.get("content"),
                         }
                         for step in section.get("steps", [])
-                    ]
+                    ],
                 }
                 directions.append(direction_section)
 
@@ -135,11 +133,8 @@ class RecipeService(BaseService):
             return None
 
     async def get_ingredient_products(
-        self,
-        ingredient_ids: List[int],
-        limit: int = 5,
-        offset: int = 0
-    ) -> Optional[Dict[str, Any]]:
+        self, ingredient_ids: list[int], limit: int = 5, offset: int = 0
+    ) -> dict[str, Any] | None:
         """Get products for specific ingredients.
 
         Args:
@@ -152,17 +147,10 @@ class RecipeService(BaseService):
         """
         await self._ensure_logged_in()
 
-        payload = {
-            "ingredientIds": ingredient_ids,
-            "offset": offset,
-            "limit": limit
-        }
+        payload = {"ingredientIds": ingredient_ids, "offset": offset, "limit": limit}
 
         try:
-            response = await self._http.post(
-                Endpoints.INGREDIENT_PRODUCTS,
-                json=payload
-            )
+            response = await self._http.post(Endpoints.INGREDIENT_PRODUCTS, json=payload)
             response.raise_for_status()
             data = response.json().get("data", {})
 
@@ -171,23 +159,27 @@ class RecipeService(BaseService):
                 products = []
                 for product in ingredient.get("products", []):
                     price_info = product.get("price", {})
-                    products.append({
-                        "product_id": product.get("productId"),
-                        "name": product.get("productName"),
-                        "image": product.get("imgPath"),
-                        "price": f"{price_info.get('full', '')} {price_info.get('currency', '')}",
-                        "price_value": price_info.get("full"),
-                        "unit": product.get("unit"),
-                        "amount": product.get("textualAmount"),
-                        "in_stock": product.get("inStock", False),
-                        "is_favorite": product.get("favourite", False),
-                    })
+                    products.append(
+                        {
+                            "product_id": product.get("productId"),
+                            "name": product.get("productName"),
+                            "image": product.get("imgPath"),
+                            "price": format_price(price_info),
+                            "price_value": price_info.get("full"),
+                            "unit": product.get("unit"),
+                            "amount": product.get("textualAmount"),
+                            "in_stock": product.get("inStock", False),
+                            "is_favorite": product.get("favourite", False),
+                        }
+                    )
 
-                ingredients_data.append({
-                    "ingredient_id": ingredient.get("id"),
-                    "products": products,
-                    "total_hits": ingredient.get("totalHits", 0),
-                })
+                ingredients_data.append(
+                    {
+                        "ingredient_id": ingredient.get("id"),
+                        "products": products,
+                        "total_hits": ingredient.get("totalHits", 0),
+                    }
+                )
 
             return {"ingredients": ingredients_data}
 

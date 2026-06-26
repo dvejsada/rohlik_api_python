@@ -1,5 +1,9 @@
 """API endpoint definitions for Rohlik.cz."""
 
+from __future__ import annotations
+
+from urllib.parse import quote
+
 BASE_URL = "https://www.rohlik.cz"
 
 
@@ -40,9 +44,11 @@ class Endpoints:
     @classmethod
     def recipe_search(cls, query: str, limit: int = 10, offset: int = 0) -> str:
         """Build recipe search endpoint URL."""
-        from urllib.parse import quote
         encoded_query = quote(query)
-        return f"/services/frontend-service/recipe/search/{encoded_query}?offset={offset}&limit={limit}"
+        return (
+            f"/services/frontend-service/recipe/search/{encoded_query}"
+            f"?offset={offset}&limit={limit}"
+        )
 
     @classmethod
     def recipe_detail(cls, recipe_id: int) -> str:
@@ -77,4 +83,7 @@ class Endpoints:
     @classmethod
     def timeslots(cls, user_id: int, address_id: int) -> str:
         """Build timeslots endpoint URL with user and address IDs."""
-        return f"/services/frontend-service/timeslots-api/0?userId={user_id}&addressId={address_id}&reasonableDeliveryTime=true"
+        return (
+            f"/services/frontend-service/timeslots-api/0"
+            f"?userId={user_id}&addressId={address_id}&reasonableDeliveryTime=true"
+        )

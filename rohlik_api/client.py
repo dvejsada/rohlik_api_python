@@ -1,20 +1,23 @@
 """Rohlik.cz API Client implementation."""
 
+from __future__ import annotations
+
 import logging
-from typing import Optional, Dict, Any
+from types import TracebackType
+from typing import Any
 
 import httpx
 
-from .http_client import HttpClient
 from .auth import AuthManager
 from .endpoints import BASE_URL
 from .errors import APIRequestFailedError
+from .http_client import HttpClient
 from .services import (
-    CartService,
-    ProductService,
-    OrderService,
-    DeliveryService,
     AccountService,
+    CartService,
+    DeliveryService,
+    OrderService,
+    ProductService,
     RecipeService,
 )
 
@@ -22,56 +25,33 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class RohlikAPI:
-    """Async client for interacting with Rohlik.cz API.
+    """Async client for interacting with the Rohlik.cz API.
 
-    This client uses httpx with HTTP/2 support for optimal performance
-    when communicating with the Rohlik.cz API endpoints. The client provides
-    a clean service-based API for all operations.
-
-    When used as an async context manager with auto_login=True (default),
-    the client automatically logs in on entry and logs out on exit.
+    The client uses httpx with HTTP/2 support and exposes a service-based API
+    for all operations. When used as an async context manager with
+    ``auto_login=True`` (the default), it logs in on entry and logs out on exit.
 
     Args:
-        username: Email address used for Rohlik.cz login (required)
-        password: Password for Rohlik.cz account (required)
+        username: Email address used for Rohlik.cz login (required).
+        password: Password for the Rohlik.cz account (required).
         base_url: Base URL for the Rohlik.cz API. Defaults to https://www.rohlik.cz
-        timeout: Request timeout in seconds. Defaults to 30.0
-        headers: Optional custom headers to include in all requests
-        auto_login: If True (default), automatically login when using context manager
+        timeout: Request timeout in seconds. Defaults to 30.0.
+        headers: Optional custom headers to include in all requests.
+        auto_login: If True (default), log in automatically when used as a
+            context manager.
 
     Attributes:
-        cart (CartService): Service for cart operations (get_content, add_items, delete_item)
-        products (ProductService): Service for product search
-        orders (OrderService): Service for order operations (get_next, get_last, get_delivered)
-        delivery (DeliveryService): Service for delivery info and timeslots
-        account (AccountService): Service for account data (premium, bags, shopping lists)
-        recipes (RecipeService): Service for recipe search and ingredient products (Rohlík Chef)
+        cart (CartService): Cart operations (get_content, add_items, delete_item).
+        products (ProductService): Product search and details.
+        orders (OrderService): Order operations (get_next, get_last, get_delivered).
+        delivery (DeliveryService): Delivery info and timeslots.
+        account (AccountService): Account data (premium, bags, shopping lists).
+        recipes (RecipeService): Recipe search and ingredients (Rohlík Chef).
 
     Example:
-        Basic usage with context manager:
-
         >>> async with RohlikAPI("user@example.com", "password") as client:
         ...     cart = await client.cart.get_content()
-        ...     print(f"Cart total: {cart['total_price']}")
-
-        Full example with all services:
-
-        >>> async with RohlikAPI("user@example.com", "password") as client:
-        ...     # Cart operations
-        ...     cart = await client.cart.get_content()
-        ...     await client.cart.add_items([{"product_id": 123, "quantity": 2}])
-        ...
-        ...     # Search products
-        ...     results = await client.products.search("milk")
-        ...
-        ...     # Order history
-        ...     orders = await client.orders.get_delivered(limit=10)
-        ...
-        ...     # Delivery info
-        ...     slots = await client.delivery.get_next_slots()
-        ...
-        ...     # Account info
-        ...     premium = await client.account.get_premium_profile()
+        ...     print(cart["total_price"])
     """
 
     def __init__(
@@ -80,26 +60,16 @@ class RohlikAPI:
         password: str,
         base_url: str = BASE_URL,
         timeout: float = 30.0,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         auto_login: bool = True,
-    ):
-        """Initialize the Rohlik API client.
-
-        Args:
-            username: Email address used for Rohlik.cz login (required)
-            password: Password for Rohlik.cz account (required)
-            base_url: Base URL for the Rohlik.cz API
-            timeout: Request timeout in seconds
-            headers: Optional custom headers to include in all requests
-            auto_login: If True, automatically login when using context manager
-        """
+    ) -> None:
         if not username or not password:
             raise ValueError("Username and password are required")
 
         self._auto_login = auto_login
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        
+
         # Initialize HTTP client
         self._http = HttpClient(
             base_url=base_url,
@@ -158,7 +128,7 @@ class RohlikAPI:
 
     @property
     def client(self) -> httpx.AsyncClient:
-        """Get or create the async HTTP client."""
+        """Get or create the underlying async HTTP client."""
         return self._http.client
 
     @property
@@ -166,49 +136,89 @@ class RohlikAPI:
         """Check if the client is currently logged in."""
         return self._auth.is_logged_in
 
+    @property
+    def user_id(self) -> int | None:
+        """The authenticated user's ID, or None if not logged in."""
+        return self._auth.user_id
+
+    @property
+    def address_id(self) -> int | None:
+        """The authenticated user's delivery address ID, or None if not logged in."""
+        return self._auth.address_id
+
+    # -------------------------------------------------------------------------
+    # Authentication
+    # -------------------------------------------------------------------------
+
+    async def login(self) -> dict[str, Any]:
+        """Authenticate with the Rohlik.cz service.
+
+        Returns:
+            The JSON response containing authentication data.
+
+        Raises:
+            InvalidCredentialsError: If the credentials are invalid.
+            APIRequestFailedError: If the request fails.
+        """
+        return await self._auth.login()
+
+    async def logout(self) -> None:
+        """Log out from the Rohlik.cz service.
+
+        Raises:
+            RohlikAPIError: If logout fails.
+            APIRequestFailedError: If the request fails.
+        """
+        await self._auth.logout()
 
     # -------------------------------------------------------------------------
     # Context Manager
     # -------------------------------------------------------------------------
 
-    async def __aenter__(self):
-        """Async context manager entry - logs in automatically if auto_login is True."""
+    async def __aenter__(self) -> RohlikAPI:
+        """Enter the context manager, logging in if ``auto_login`` is True."""
         if self._auto_login:
             await self._auth.login()
         return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit - logout and close."""
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exit the context manager, logging out and releasing resources."""
         await self.close()
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the HTTP client and release resources. Logs out if logged in."""
         if self._auth.is_logged_in:
             try:
                 await self._auth.logout()
-            except Exception as err:
-                _LOGGER.error(f"Error during logout on close: {err}")
+            except Exception as err:  # noqa: BLE001 - best-effort logout on close
+                _LOGGER.error("Error during logout on close: %s", err)
 
         await self._http.close()
 
-
     # -------------------------------------------------------------------------
-    # Data Retrieval Methods
+    # Aggregated data retrieval
     # -------------------------------------------------------------------------
 
-    async def get_data(self) -> Dict[str, Any]:
-        """Retrieve all account data from Rohlik.cz in a single operation.
+    async def get_data(self) -> dict[str, Any]:
+        """Retrieve account data from Rohlik.cz in a single aggregated call.
 
         Returns:
-            dict: Dictionary containing all account data including delivery info,
-                  orders, premium profile, cart contents, etc.
+            A dictionary containing delivery info, orders, cart contents,
+            premium profile, announcements and more.
+
+        Raises:
+            APIRequestFailedError: If the underlying requests fail.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         result["login"] = await self._auth.login()
 
         try:
-            # Fetch all data using services
             result["delivery"] = await self._delivery.get_info()
             result["next_order"] = await self._orders.get_next()
             result["last_order"] = await self._orders.get_last()
@@ -224,5 +234,7 @@ class RohlikAPI:
             return result
 
         except httpx.HTTPError as err:
-            raise APIRequestFailedError(f"Cannot connect to website! Check your internet connection and try again: {err}")
-
+            raise APIRequestFailedError(
+                f"Cannot connect to website! Check your internet connection "
+                f"and try again: {err}"
+            ) from err

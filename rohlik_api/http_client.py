@@ -1,7 +1,10 @@
 """HTTP client for Rohlik.cz API."""
 
+from __future__ import annotations
+
 import logging
-from typing import Optional, Dict, Any
+from importlib.metadata import PackageNotFoundError, version
+from typing import Any
 
 import httpx
 
@@ -9,18 +12,23 @@ from .endpoints import BASE_URL
 
 _LOGGER = logging.getLogger(__name__)
 
+try:
+    _VERSION = version("rohlik-api")
+except PackageNotFoundError:  # pragma: no cover - package not installed
+    _VERSION = "0.0.0"
+
 
 class HttpClient:
     """Async HTTP client with HTTP/2 support for Rohlik.cz API."""
 
-    DEFAULT_USER_AGENT = "rohlik-api-python/0.1.0"
+    DEFAULT_USER_AGENT = f"rohlik-api-python/{_VERSION}"
 
     def __init__(
         self,
         base_url: str = BASE_URL,
         timeout: float = 30.0,
-        headers: Optional[Dict[str, str]] = None,
-    ):
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
@@ -31,7 +39,7 @@ class HttpClient:
         if headers:
             self._headers.update(headers)
 
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -60,8 +68,8 @@ class HttpClient:
     async def get(
         self,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """Make a GET request."""
         return await self.client.get(endpoint, params=params, headers=headers)
@@ -69,9 +77,9 @@ class HttpClient:
     async def post(
         self,
         endpoint: str,
-        data: Optional[Dict[str, Any]] = None,
-        json: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """Make a POST request."""
         return await self.client.post(endpoint, data=data, json=json, headers=headers)
@@ -79,16 +87,16 @@ class HttpClient:
     async def delete(
         self,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """Make a DELETE request."""
         return await self.client.delete(endpoint, params=params, headers=headers)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> HttpClient:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Async context manager exit."""
         await self.close()

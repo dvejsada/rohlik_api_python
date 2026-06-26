@@ -11,6 +11,15 @@ An async Python client library for interacting with the Rohlik.cz API using http
 - 🍳 Recipe search and ingredient products (Rohlík Chef)
 - 📦 Product details, composition, and AI summaries
 
+## Requirements
+
+- Python 3.11+
+- [httpx](https://www.python-httpx.org/) with HTTP/2 support (installed automatically)
+
+> **Disclaimer:** This is an unofficial client for the non-public Rohlik.cz API
+> and is not affiliated with or endorsed by Rohlik.cz. The API may change without
+> notice.
+
 ## Installation
 
 ```bash
@@ -182,6 +191,30 @@ all_data = await client.get_data()
 # Returns dict with: login, delivery, next_order, last_order, cart, premium_profile, etc.
 ```
 
+## Error Handling
+
+All errors derive from `RohlikAPIError`:
+
+```python
+from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError
+
+try:
+    async with RohlikAPI(username="email@example.com", password="password") as client:
+        cart = await client.cart.get_content()
+except InvalidCredentialsError:
+    print("Wrong username or password")
+except APIRequestFailedError as err:
+    print(f"Request failed: {err}")
+```
+
+Note on the error contract:
+
+- **Write/critical operations** (login, `cart.get_content`, `cart.delete_item`,
+  `account.get_shopping_list`) **raise** `APIRequestFailedError` on failure.
+- **Read/optional fetches** (most `orders`, `delivery`, `account`, `products`,
+  and `recipes` getters) **return `None`** on failure so an aggregate fetch can
+  continue gracefully.
+
 ## Advanced Usage
 
 ### Manual Session Management
@@ -196,11 +229,26 @@ async def main():
         auto_login=False  # Disable auto-login
     )
     try:
-        await client._auth.login()
+        await client.login()
         cart = await client.cart.get_content()
-        await client._auth.logout()
+        await client.logout()
     finally:
         await client.close()
+```
+
+## Development
+
+```bash
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Run the test suite
+pytest
+
+# Lint, format check and type check
+ruff check .
+black --check .
+mypy rohlik_api
 ```
 
 ## License
@@ -209,4 +257,5 @@ MIT License - see LICENSE file for details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. Make sure
+`pytest`, `ruff`, `black` and `mypy` all pass before opening one.

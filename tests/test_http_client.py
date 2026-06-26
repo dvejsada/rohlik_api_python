@@ -1,8 +1,9 @@
 """Tests for the HttpClient class."""
 
 import pytest
-from rohlik_api.http_client import HttpClient
+
 from rohlik_api import BASE_URL
+from rohlik_api.http_client import HttpClient
 
 
 class TestHttpClientInitialization:

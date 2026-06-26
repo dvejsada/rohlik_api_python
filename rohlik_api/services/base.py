@@ -1,12 +1,14 @@
 """Base service class for Rohlik.cz API services."""
 
+from __future__ import annotations
+
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 import httpx
 
-from ..http_client import HttpClient
 from ..auth import AuthManager
+from ..http_client import HttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,11 +19,11 @@ class BaseService:
     Provides common functionality like HTTP client access and authentication.
 
     Args:
-        http_client: The HTTP client instance
-        auth_manager: The authentication manager instance
+        http_client: The HTTP client instance.
+        auth_manager: The authentication manager instance.
     """
 
-    def __init__(self, http_client: HttpClient, auth_manager: AuthManager):
+    def __init__(self, http_client: HttpClient, auth_manager: AuthManager) -> None:
         self._http = http_client
         self._auth = auth_manager
 
@@ -32,23 +34,24 @@ class BaseService:
     async def _fetch_endpoint(
         self,
         endpoint: str,
-        error_context: str
-    ) -> Optional[Dict[str, Any]]:
+        error_context: str,
+    ) -> dict[str, Any] | None:
         """Fetch data from an endpoint with error handling.
 
         Args:
-            endpoint: The API endpoint path
-            error_context: Context string for error logging
+            endpoint: The API endpoint path.
+            error_context: Context string for error logging.
 
         Returns:
-            dict: Response data or None if request fails
+            The parsed JSON response, or None if the request fails.
         """
         await self._ensure_logged_in()
 
         try:
             response = await self._http.get(endpoint)
             response.raise_for_status()
-            return response.json()
+            data: dict[str, Any] = response.json()
+            return data
         except httpx.HTTPError as err:
-            _LOGGER.error(f"Error fetching {error_context}: {err}")
+            _LOGGER.error("Error fetching %s: %s", error_context, err)
             return None

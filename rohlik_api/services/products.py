@@ -1,12 +1,15 @@
 """Products service for Rohlik.cz API."""
 
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import httpx
 
-from .base import BaseService
 from ..endpoints import Endpoints
+from ..helpers import format_price
+from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,11 +18,8 @@ class ProductService(BaseService):
     """Service for product-related operations."""
 
     async def search(
-        self,
-        product_name: str,
-        limit: int = 10,
-        favourite: bool = False
-    ) -> Optional[Dict[str, Any]]:
+        self, product_name: str, limit: int = 10, favourite: bool = False
+    ) -> dict[str, Any] | None:
         """Search for products by name.
 
         Args:
@@ -38,18 +38,19 @@ class ProductService(BaseService):
             "limit": limit + 5,
             "companyId": 1,
             "filterData": {"filters": []},
-            "canCorrect": True
+            "canCorrect": True,
         }
 
         try:
             response = await self._http.get(Endpoints.SEARCH, params=search_payload)
             response.raise_for_status()
             search_data = response.json()
-            found_products: List[Dict] = search_data.get("data", {}).get("productList", [])
+            found_products: list[dict] = search_data.get("data", {}).get("productList", [])
 
             # Remove sponsored content
             found_products = [
-                p for p in found_products
+                p
+                for p in found_products
                 if not any(badge.get("slug") == "promoted" for badge in p.get("badge", []))
             ]
 
@@ -62,16 +63,17 @@ class ProductService(BaseService):
                 found_products = found_products[:limit]
 
             if found_products:
-                search_results = {"search_results": []}
+                search_results: dict[str, Any] = {"search_results": []}
                 for product in found_products:
-                    price_info = product.get("price", {})
-                    search_results["search_results"].append({
-                        "id": product.get("productId"),
-                        "name": product.get("productName"),
-                        "price": f"{price_info.get('full', '')} {price_info.get('currency', '')}",
-                        "brand": product.get("brand"),
-                        "amount": product.get("textualAmount")
-                    })
+                    search_results["search_results"].append(
+                        {
+                            "id": product.get("productId"),
+                            "name": product.get("productName"),
+                            "price": format_price(product.get("price")),
+                            "brand": product.get("brand"),
+                            "amount": product.get("textualAmount"),
+                        }
+                    )
                 return search_results
             else:
                 return None
@@ -80,7 +82,7 @@ class ProductService(BaseService):
             _LOGGER.error(f"Request failed: {err}")
             return None
 
-    async def get_ai_summary(self, product_id: int) -> Optional[Dict[str, Any]]:
+    async def get_ai_summary(self, product_id: int) -> dict[str, Any] | None:
         """Get AI-generated summary for a product.
 
         Args:
@@ -108,7 +110,7 @@ class ProductService(BaseService):
             _LOGGER.error(f"Error fetching AI summary for product {product_id}: {err}")
             return None
 
-    async def get_composition(self, product_id: int) -> Optional[Dict[str, Any]]:
+    async def get_composition(self, product_id: int) -> dict[str, Any] | None:
         """Get composition and nutritional values for a product.
 
         Args:
@@ -129,18 +131,20 @@ class ProductService(BaseService):
             nutritional_values = []
             for nv in data.get("nutritionalValues", []):
                 values = nv.get("values", {})
-                nutritional_values.append({
-                    "portion": nv.get("portion"),
-                    "energy_kj": values.get("energyKJ", {}).get("amount"),
-                    "energy_kcal": values.get("energyKCal", {}).get("amount"),
-                    "fats": values.get("fats", {}).get("amount"),
-                    "saturated_fats": values.get("saturatedFats", {}).get("amount"),
-                    "carbohydrates": values.get("carbohydrates", {}).get("amount"),
-                    "sugars": values.get("sugars", {}).get("amount"),
-                    "protein": values.get("protein", {}).get("amount"),
-                    "salt": values.get("salt", {}).get("amount"),
-                    "fiber": values.get("fiber", {}).get("amount"),
-                })
+                nutritional_values.append(
+                    {
+                        "portion": nv.get("portion"),
+                        "energy_kj": values.get("energyKJ", {}).get("amount"),
+                        "energy_kcal": values.get("energyKCal", {}).get("amount"),
+                        "fats": values.get("fats", {}).get("amount"),
+                        "saturated_fats": values.get("saturatedFats", {}).get("amount"),
+                        "carbohydrates": values.get("carbohydrates", {}).get("amount"),
+                        "sugars": values.get("sugars", {}).get("amount"),
+                        "protein": values.get("protein", {}).get("amount"),
+                        "salt": values.get("salt", {}).get("amount"),
+                        "fiber": values.get("fiber", {}).get("amount"),
+                    }
+                )
 
             # Parse allergens
             allergens_data = data.get("allergens", {})
@@ -159,7 +163,7 @@ class ProductService(BaseService):
             _LOGGER.error(f"Error fetching composition for product {product_id}: {err}")
             return None
 
-    async def get_price(self, product_id: int) -> Optional[Dict[str, Any]]:
+    async def get_price(self, product_id: int) -> dict[str, Any] | None:
         """Get current price for a product.
 
         Args:
@@ -190,4 +194,3 @@ class ProductService(BaseService):
         except httpx.HTTPError as err:
             _LOGGER.error(f"Error fetching price for product {product_id}: {err}")
             return None
-
