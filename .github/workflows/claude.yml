@@ -1,6 +1,6 @@
-name: Claude
+name: Claude Code
 
-# Manually triggered by mentioning @claude in an issue, an issue comment,
+# Runs Claude Code when you mention @claude in an issue, an issue comment,
 # a pull request review, or a pull request review comment.
 on:
   issue_comment:
@@ -14,8 +14,7 @@ on:
 
 jobs:
   claude:
-    # Only run when "@claude" is actually mentioned, to avoid spinning up a
-    # runner for every comment.
+    # Only run when "@claude" is mentioned.
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
@@ -23,26 +22,18 @@ jobs:
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # allow Claude to commit and push directly to main
-      issues: write
+      contents: write
       pull-requests: write
+      issues: write
       id-token: write
-      actions: read          # allow reading CI results for context
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Run Claude
+      - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          trigger_phrase: "@claude"
-          # Use plain git instead of the signed-commit API so Claude can push
-          # straight to the default branch.
-          use_commit_signing: false
-          claude_args: |
-            --allowedTools "Bash(git:*)"
-            --append-system-prompt "When you make changes in this repository, commit them and push directly to the main branch with 'git push origin HEAD:main'. Do not create a feature branch or open a pull request."
