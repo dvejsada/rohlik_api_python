@@ -51,5 +51,5 @@ class OrderService(BaseService):
             orders: list[dict[str, Any]] = response.json()
             return orders
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching delivered orders: %s", err)
+            _LOGGER.warning("Error fetching delivered orders: %s", err)
             return None

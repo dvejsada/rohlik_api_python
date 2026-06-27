@@ -61,5 +61,5 @@ class BaseService:
             data: dict[str, Any] = response.json()
             return data
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching %s: %s", error_context, err)
+            _LOGGER.warning("Error fetching %s: %s", error_context, err)
             return None

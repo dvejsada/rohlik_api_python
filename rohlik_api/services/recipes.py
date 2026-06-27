@@ -38,7 +38,7 @@ class RecipeService(BaseService):
             response.raise_for_status()
             return RecipeSearchResults.from_api(response.json())
         except httpx.HTTPError as err:
-            _LOGGER.error("Error searching recipes: %s", err)
+            _LOGGER.warning("Error searching recipes: %s", err)
             return None
 
     async def get_detail(self, recipe_id: int) -> RecipeDetail | None:
@@ -58,7 +58,7 @@ class RecipeService(BaseService):
             response.raise_for_status()
             return RecipeDetail.from_api(response.json())
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching recipe detail: %s", err)
+            _LOGGER.warning("Error fetching recipe detail: %s", err)
             return None
 
     async def get_ingredient_products(
@@ -84,5 +84,5 @@ class RecipeService(BaseService):
             response.raise_for_status()
             return IngredientProducts.from_api(response.json())
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching ingredient products: %s", err)
+            _LOGGER.warning("Error fetching ingredient products: %s", err)
             return None

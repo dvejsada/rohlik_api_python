@@ -80,8 +80,10 @@ ignore = []
 python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+# Strict typing is enforced for the package; tests are excluded.
+exclude = ["^tests/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

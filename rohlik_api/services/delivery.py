@@ -42,13 +42,15 @@ class DeliveryService(BaseService):
         Returns:
             dict: Available delivery slots or None if request fails
         """
+        # Log in first (also done by _fetch_endpoint below) so that the auth
+        # manager's user_id/address_id are populated before we build the URL.
         await self._ensure_logged_in()
 
         uid = user_id or self._auth.user_id
         aid = address_id or self._auth.address_id
 
         if not uid or not aid:
-            _LOGGER.error("User ID or Address ID not available for timeslots request")
+            _LOGGER.warning("User ID or Address ID not available for timeslots request")
             return None
 
         url = Endpoints.timeslots(user_id=uid, address_id=aid)

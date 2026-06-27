@@ -65,7 +65,7 @@ class CartService(BaseService):
                 response.raise_for_status()
                 added_products.append(product_id)
             except httpx.HTTPError as err:
-                _LOGGER.error("Error adding %s due to %s", product_id, err)
+                _LOGGER.warning("Error adding %s due to %s", product_id, err)
 
         return added_products
 

@@ -99,19 +99,16 @@ class AuthManager:
             self._is_logged_in = True
             self._login_response = login_response
 
-            # Extract user and address IDs
+            # Extract user and address IDs. ``address`` may be explicitly null
+            # in the response, so guard with ``or {}``.
             data = login_response.get("data", {})
-            if not self._user_id:
-                self._user_id = data.get("user", {}).get("id")
-
-            if not self._address_id:
-                try:
-                    self._address_id = data.get("address", {}).get("id")
-                except AttributeError:
-                    _LOGGER.error(
-                        "Address cannot be retrieved from login data. Login response: %s",
-                        mask_data(login_response),
-                    )
+            self._user_id = data.get("user", {}).get("id")
+            self._address_id = (data.get("address") or {}).get("id")
+            if self._address_id is None:
+                _LOGGER.debug(
+                    "No address ID in login data. Login response: %s",
+                    mask_data(login_response),
+                )
 
             return login_response
 

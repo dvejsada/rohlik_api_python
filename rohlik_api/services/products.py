@@ -49,7 +49,7 @@ class ProductService(BaseService):
             response.raise_for_status()
             found_products = response.json().get("data", {}).get("productList", [])
         except httpx.HTTPError as err:
-            _LOGGER.error("Request failed: %s", err)
+            _LOGGER.warning("Request failed: %s", err)
             return None
 
         # Remove sponsored content
@@ -86,7 +86,7 @@ class ProductService(BaseService):
             response.raise_for_status()
             return AISummary.from_api(response.json())
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching AI summary for product %s: %s", product_id, err)
+            _LOGGER.warning("Error fetching AI summary for product %s: %s", product_id, err)
             return None
 
     async def get_composition(self, product_id: int) -> ProductComposition | None:
@@ -105,7 +105,7 @@ class ProductService(BaseService):
             response.raise_for_status()
             return ProductComposition.from_api(response.json())
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching composition for product %s: %s", product_id, err)
+            _LOGGER.warning("Error fetching composition for product %s: %s", product_id, err)
             return None
 
     async def get_price(self, product_id: int) -> ProductPrice | None:
@@ -124,5 +124,5 @@ class ProductService(BaseService):
             response.raise_for_status()
             return ProductPrice.from_api(response.json())
         except httpx.HTTPError as err:
-            _LOGGER.error("Error fetching price for product %s: %s", product_id, err)
+            _LOGGER.warning("Error fetching price for product %s: %s", product_id, err)
             return None
