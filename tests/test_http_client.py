@@ -1,9 +1,39 @@
 """Tests for the HttpClient class."""
 
+from unittest.mock import AsyncMock
+
 import aiohttp
 
-from rohlik_api import BASE_URL
+from rohlik_api import BASE_URL, Endpoints
 from rohlik_api.http_client import HttpClient
+
+
+class _FakeResponse:
+    """Minimal stand-in for an aiohttp ClientResponse."""
+
+    def __init__(self, status: int, body: bytes = b"{}") -> None:
+        self.status = status
+        self._body = body
+
+    async def read(self) -> bytes:
+        return self._body
+
+    def raise_for_status(self) -> None:
+        if self.status >= 400:
+            raise aiohttp.ClientResponseError(None, (), status=self.status)
+
+
+class _FakeSession:
+    """Fake aiohttp session that yields a scripted sequence of responses."""
+
+    def __init__(self, responses: list[_FakeResponse]) -> None:
+        self._responses = list(responses)
+        self.closed = False
+        self.calls: list[tuple[str, str]] = []
+
+    async def request(self, method: str, url: str, **kwargs: object) -> _FakeResponse:
+        self.calls.append((method, url))
+        return self._responses.pop(0)
 
 
 class TestHttpClientInitialization:
@@ -123,6 +153,59 @@ class TestHttpClientInjectedSession:
             assert session.closed is False
         finally:
             await session.close()
+
+
+class TestHttpClientReauth:
+    """Tests for transparent re-authentication on HTTP 401."""
+
+    async def test_retries_once_after_reauth_on_401(self):
+        """A 401 triggers the handler and the request is retried once."""
+        session = _FakeSession([_FakeResponse(401), _FakeResponse(200, b'{"ok": true}')])
+        handler = AsyncMock()
+        http = HttpClient(session=session)
+        http.set_unauthorized_handler(handler)
+
+        response = await http.get("/api/v3/orders/upcoming")
+
+        handler.assert_awaited_once()
+        assert response.status == 200
+        assert response.json() == {"ok": True}
+        assert len(session.calls) == 2
+
+    async def test_no_retry_without_handler(self):
+        """Without a handler, a 401 is returned untouched."""
+        session = _FakeSession([_FakeResponse(401)])
+        http = HttpClient(session=session)
+
+        response = await http.get("/api/v3/orders/upcoming")
+
+        assert response.status == 401
+        assert len(session.calls) == 1
+
+    async def test_login_endpoint_is_exempt_from_reauth(self):
+        """A 401 on the login endpoint must not invoke the handler (no recursion)."""
+        session = _FakeSession([_FakeResponse(401)])
+        handler = AsyncMock()
+        http = HttpClient(session=session)
+        http.set_unauthorized_handler(handler)
+
+        response = await http.post(Endpoints.LOGIN, json={"email": "a", "password": "b"})
+
+        handler.assert_not_awaited()
+        assert response.status == 401
+        assert len(session.calls) == 1
+
+    async def test_non_401_does_not_trigger_reauth(self):
+        """A successful request never invokes the re-auth handler."""
+        session = _FakeSession([_FakeResponse(200)])
+        handler = AsyncMock()
+        http = HttpClient(session=session)
+        http.set_unauthorized_handler(handler)
+
+        await http.get("/api/v3/orders/upcoming")
+
+        handler.assert_not_awaited()
+        assert len(session.calls) == 1
 
 
 class TestHttpClientContextManager:

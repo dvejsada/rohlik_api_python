@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from ..endpoints import Endpoints
 from ..http_client import HTTP_ERRORS
@@ -124,4 +125,52 @@ class ProductService(BaseService):
             return ProductPrice.from_api(response.json())
         except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching price for product %s: %s", product_id, err)
+            return None
+
+    async def get_detail(self, product_id: int) -> dict[str, Any] | None:
+        """Get the full product detail (brand, attributes, etc.).
+
+        Args:
+            product_id: The ID of the product.
+
+        Returns:
+            dict: The raw product detail, or None if the product does not exist
+            (404) or the request fails.
+        """
+        await self._ensure_logged_in()
+
+        try:
+            response = await self._http.get(Endpoints.product_detail(product_id))
+            if response.status == 404:
+                return None
+            response.raise_for_status()
+            detail: dict[str, Any] = response.json()
+            return detail
+        except HTTP_ERRORS as err:
+            _LOGGER.warning("Error fetching detail for product %s: %s", product_id, err)
+            return None
+
+    async def get_categories(self, product_id: int) -> list[dict[str, Any]] | None:
+        """Get the category hierarchy for a product.
+
+        Args:
+            product_id: The ID of the product.
+
+        Returns:
+            list: The category hierarchy (possibly empty), or None if the
+            product no longer exists (404) or the request fails. A 404 typically
+            means the product has been discontinued.
+        """
+        await self._ensure_logged_in()
+
+        try:
+            response = await self._http.get(Endpoints.product_categories(product_id))
+            if response.status == 404:
+                _LOGGER.debug("Product %s not found (discontinued)", product_id)
+                return None
+            response.raise_for_status()
+            categories: list[dict[str, Any]] = response.json().get("categories", [])
+            return categories
+        except HTTP_ERRORS as err:
+            _LOGGER.warning("Error fetching categories for product %s: %s", product_id, err)
             return None

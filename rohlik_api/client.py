@@ -88,6 +88,10 @@ class RohlikAPI:
             password=password,
         )
 
+        # Wire up transparent re-authentication: when any request hits HTTP 401
+        # (expired session), the HTTP client re-logs in and retries once.
+        self._http.set_unauthorized_handler(self._auth.relogin)
+
         # Initialize services
         self._cart = CartService(self._http, self._auth)
         self._products = ProductService(self._http, self._auth)

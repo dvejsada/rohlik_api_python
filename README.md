@@ -34,7 +34,7 @@ online grocery service — search products, manage your cart, browse recipes
 ## Features
 
 - 🚀 Built on aiohttp; bring your own session (e.g. Home Assistant's shared session)
-- 🔐 Automatic login/logout and session management
+- 🔐 Automatic login/logout, plus transparent re-authentication when a session expires (HTTP 401)
 - 🎯 Clean, service-based API (`client.cart`, `client.products`, …)
 - 🧩 Fully typed dataclass models for parsed responses (`py.typed`)
 - 🔄 Works as an async context manager
@@ -171,6 +171,12 @@ composition = await client.products.get_composition(product_id=1425155)
 
 # Current price -> ProductPrice | None
 price = await client.products.get_price(product_id=1425155)
+
+# Raw product detail (brand, attributes, …) -> dict | None (None on 404)
+detail = await client.products.get_detail(product_id=1425155)
+
+# Category hierarchy -> list[dict] | None (None if discontinued / 404)
+categories = await client.products.get_categories(product_id=1425155)
 ```
 
 ### Orders service (`client.orders`)
@@ -178,7 +184,9 @@ price = await client.products.get_price(product_id=1425155)
 ```python
 next_order = await client.orders.get_next()                       # upcoming order
 last_order = await client.orders.get_last()                       # last delivered order
-orders = await client.orders.get_delivered(limit=50, offset=0)    # history
+orders = await client.orders.get_delivered(limit=50, offset=0)    # one history page
+all_orders = await client.orders.get_all_delivered()              # every page, paginated
+detail = await client.orders.get_detail(order_id=12345678)        # full order incl. items
 ```
 
 ### Delivery service (`client.delivery`)

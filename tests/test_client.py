@@ -183,6 +183,11 @@ class TestClientAuthentication:
         async with client:
             client._auth.login.assert_awaited_once()
 
+    def test_reauth_handler_is_wired(self):
+        """The HTTP client's 401 handler delegates to the auth manager's relogin."""
+        client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
+        assert client._http._on_unauthorized == client._auth.relogin
+
     def test_user_and_address_id_properties(self):
         """Test that user_id and address_id properties expose auth state."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)

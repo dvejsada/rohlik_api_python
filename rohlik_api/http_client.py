@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import aiohttp
 
-from .endpoints import BASE_URL
+from .endpoints import BASE_URL, Endpoints
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,9 +65,16 @@ class HttpClient:
         timeout: Request timeout in seconds.
         headers: Optional custom headers added to every request.
         session: Optional externally managed aiohttp session to reuse.
+        on_unauthorized: Optional async callback invoked when a request returns
+            HTTP 401 (an expired session). After it runs, the request is retried
+            once. Login/logout requests are exempt to avoid recursion.
     """
 
     DEFAULT_USER_AGENT = f"rohlik-api-python/{_VERSION}"
+
+    # Endpoints that must never trigger the re-auth retry (the callback logs in
+    # via the login endpoint, so retrying it would recurse).
+    _NO_REAUTH_ENDPOINTS = (Endpoints.LOGIN, Endpoints.LOGOUT)
 
     def __init__(
         self,
@@ -73,6 +82,7 @@ class HttpClient:
         timeout: float = 30.0,
         headers: dict[str, str] | None = None,
         session: aiohttp.ClientSession | None = None,
+        on_unauthorized: Callable[[], Awaitable[Any]] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -87,6 +97,13 @@ class HttpClient:
 
         self._session = session
         self._owns_session = session is None
+
+        self._on_unauthorized = on_unauthorized
+        self._reauth_lock = asyncio.Lock()
+
+    def set_unauthorized_handler(self, handler: Callable[[], Awaitable[Any]] | None) -> None:
+        """Register the callback used to re-authenticate on an HTTP 401."""
+        self._on_unauthorized = handler
 
     @property
     def session(self) -> aiohttp.ClientSession:
@@ -158,20 +175,45 @@ class HttpClient:
         json_data: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Response:
-        """Perform a request and return a fully buffered :class:`Response`."""
-        response = await self.session.request(
-            method,
-            self._build_url(endpoint),
-            params=self._prepare_params(params),
-            data=data,
-            json=json_data,
-            headers=self._merge_headers(headers),
-            timeout=self._timeout,
-        )
-        # Buffer the body so the connection is released regardless of how the
-        # caller consumes the response, and so ``Response.json`` works later.
-        body = await response.read()
-        return Response(response.status, body, response)
+        """Perform a request and return a fully buffered :class:`Response`.
+
+        On an HTTP 401 the registered re-auth callback (if any) is invoked once
+        and the request is retried, transparently recovering from an expired
+        session on a long-lived client.
+        """
+        url = self._build_url(endpoint)
+        prepared_params = self._prepare_params(params)
+        merged_headers = self._merge_headers(headers)
+
+        async def _send() -> tuple[int, bytes, aiohttp.ClientResponse]:
+            response = await self.session.request(
+                method,
+                url,
+                params=prepared_params,
+                data=data,
+                json=json_data,
+                headers=merged_headers,
+                timeout=self._timeout,
+            )
+            # Buffer the body so the connection is released regardless of how
+            # the caller consumes the response, and so ``Response.json`` works
+            # later.
+            body = await response.read()
+            return response.status, body, response
+
+        status, body, response = await _send()
+
+        if (
+            status == 401
+            and self._on_unauthorized is not None
+            and endpoint not in self._NO_REAUTH_ENDPOINTS
+        ):
+            # Serialize re-auth so concurrent 401s trigger a single login.
+            async with self._reauth_lock:
+                await self._on_unauthorized()
+            status, body, response = await _send()
+
+        return Response(status, body, response)
 
     async def get(
         self,

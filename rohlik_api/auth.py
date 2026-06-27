@@ -148,6 +148,18 @@ class AuthManager:
         if not self._is_logged_in:
             await self.login()
 
+    async def relogin(self) -> dict[str, Any]:
+        """Force a fresh login after a session expiry (HTTP 401).
+
+        Clears the cached session state so :meth:`login` performs a new request
+        instead of returning the stale cached response, then logs in again.
+
+        Returns:
+            dict: The JSON response from the new login.
+        """
+        self._reset_session()
+        return await self.login()
+
     def _reset_session(self) -> None:
         """Clear all session state so the next login re-fetches it.
 

@@ -56,6 +56,21 @@ class Endpoints:
         return f"/services/frontend-service/recipe/{recipe_id}"
 
     @classmethod
+    def order_detail(cls, order_id: int) -> str:
+        """Build order detail endpoint URL (full order including items)."""
+        return f"/api/v3/orders/{order_id}"
+
+    @classmethod
+    def product_detail(cls, product_id: int) -> str:
+        """Build product detail endpoint URL."""
+        return f"/api/v1/products/{product_id}"
+
+    @classmethod
+    def product_categories(cls, product_id: int) -> str:
+        """Build product category-hierarchy endpoint URL."""
+        return f"/api/v1/products/{product_id}/categories"
+
+    @classmethod
     def product_ai_summary(cls, product_id: int) -> str:
         """Build product AI summary endpoint URL."""
         return f"/api/v1/products/{product_id}/ai-summary"

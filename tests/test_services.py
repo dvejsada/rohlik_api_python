@@ -297,6 +297,58 @@ class TestProductService:
 
         assert result is None
 
+    async def test_get_detail_returns_data(self, mock_http, mock_auth):
+        """Test get_detail returns the raw product detail."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"id": 123, "brand": "TestBrand"}
+        mock_response.raise_for_status = MagicMock()
+        mock_response.status = 200
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_detail(123)
+
+        assert result["brand"] == "TestBrand"
+
+    async def test_get_detail_returns_none_on_404(self, mock_http, mock_auth):
+        """Test get_detail returns None for a discontinued product."""
+        mock_response = MagicMock()
+        mock_response.status = 404
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_detail(123)
+
+        assert result is None
+
+    async def test_get_categories_returns_hierarchy(self, mock_http, mock_auth):
+        """Test get_categories returns the inner category list."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "categories": [{"level": 0, "name": "Food"}, {"level": 1, "name": "Dairy"}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_response.status = 200
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_categories(123)
+
+        assert [c["name"] for c in result] == ["Food", "Dairy"]
+
+    async def test_get_categories_returns_none_on_404(self, mock_http, mock_auth):
+        """Test get_categories returns None for a discontinued product."""
+        mock_response = MagicMock()
+        mock_response.status = 404
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_categories(123)
+
+        assert result is None
+
 
 class TestOrderService:
     """Tests for OrderService."""
@@ -329,6 +381,51 @@ class TestOrderService:
         result = await service.get_delivered(limit=10, offset=5)
 
         assert len(result) == 2
+
+    async def test_get_all_delivered_paginates(self, mock_http, mock_auth):
+        """Test get_all_delivered walks pages until a short page ends it."""
+        page1 = MagicMock()
+        page1.json.return_value = [{"id": 1}, {"id": 2}]
+        page1.raise_for_status = MagicMock()
+        page1.status = 200
+        page2 = MagicMock()
+        page2.json.return_value = [{"id": 3}]
+        page2.raise_for_status = MagicMock()
+        page2.status = 200
+        mock_http.get.side_effect = [page1, page2]
+
+        service = OrderService(mock_http, mock_auth)
+        result = await service.get_all_delivered(page_size=2)
+
+        assert [o["id"] for o in result] == [1, 2, 3]
+        assert mock_http.get.call_count == 2
+
+    async def test_get_detail_returns_data(self, mock_http, mock_auth):
+        """Test get_detail returns the order detail."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"id": 42, "items": [{"name": "Milk"}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_response.status = 200
+        mock_http.get.return_value = mock_response
+
+        service = OrderService(mock_http, mock_auth)
+        result = await service.get_detail(42)
+
+        assert result["id"] == 42
+        assert result["items"][0]["name"] == "Milk"
+
+    async def test_get_detail_returns_none_on_404(self, mock_http, mock_auth):
+        """Test get_detail returns None when the order does not exist."""
+        mock_response = MagicMock()
+        mock_response.status = 404
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = OrderService(mock_http, mock_auth)
+        result = await service.get_detail(999)
+
+        assert result is None
+        mock_response.raise_for_status.assert_not_called()
 
 
 class TestDeliveryService:

@@ -125,3 +125,25 @@ class TestAuthManagerSession:
         assert auth.is_logged_in is False
         assert auth.user_id is None
         assert auth.address_id is None
+
+    async def test_relogin_forces_fresh_login(self):
+        """relogin clears cached state and performs a new login request."""
+        http = MagicMock(spec=HttpClient)
+        http.post = AsyncMock(
+            side_effect=[
+                _response({"status": 200, "data": {"user": {"id": 1}, "address": {"id": 2}}}),
+                _response({"status": 200, "data": {"user": {"id": 9}, "address": {"id": 8}}}),
+            ]
+        )
+        auth = AuthManager(http, "user@example.com", "password123")
+
+        await auth.login()
+        assert auth.user_id == 1
+
+        # relogin must bypass the "already logged in" short-circuit.
+        await auth.relogin()
+
+        assert auth.is_logged_in is True
+        assert auth.user_id == 9
+        assert auth.address_id == 8
+        assert http.post.call_count == 2

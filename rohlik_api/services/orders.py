@@ -52,3 +52,51 @@ class OrderService(BaseService):
         except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching delivered orders: %s", err)
             return None
+
+    async def get_all_delivered(self, page_size: int = 50) -> list[dict[str, Any]]:
+        """Get every delivered order by paginating until the list is exhausted.
+
+        Args:
+            page_size: Number of orders fetched per request.
+
+        Returns:
+            list: All delivered orders (empty if there are none or the first
+            page fails).
+        """
+        await self._ensure_logged_in()
+
+        all_orders: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = await self.get_delivered(limit=page_size, offset=offset)
+            if not page:
+                break
+            all_orders.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+
+        return all_orders
+
+    async def get_detail(self, order_id: int) -> dict[str, Any] | None:
+        """Get full detail for a single order, including its line items.
+
+        Args:
+            order_id: The ID of the order.
+
+        Returns:
+            dict: The order detail, or None if the order does not exist (404)
+            or the request fails.
+        """
+        await self._ensure_logged_in()
+
+        try:
+            response = await self._http.get(Endpoints.order_detail(order_id))
+            if response.status == 404:
+                return None
+            response.raise_for_status()
+            detail: dict[str, Any] = response.json()
+            return detail
+        except HTTP_ERRORS as err:
+            _LOGGER.warning("Error fetching order detail for %s: %s", order_id, err)
+            return None
