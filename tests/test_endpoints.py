@@ -1,7 +1,6 @@
 """Tests for the Endpoints class."""
 
-import pytest
-from rohlik_api import Endpoints, BASE_URL
+from rohlik_api import BASE_URL, Endpoints
 
 
 class TestEndpointsConstants:
@@ -34,7 +33,6 @@ class TestEndpointsConstants:
     def test_next_order_endpoint(self):
         """Test NEXT_ORDER endpoint."""
         assert Endpoints.NEXT_ORDER == "/api/v3/orders/upcoming"
-
 
     def test_premium_profile_endpoint(self):
         """Test PREMIUM_PROFILE endpoint."""
@@ -91,49 +89,49 @@ class TestEndpointsCompleteness:
 
     def test_all_auth_endpoints_exist(self):
         """Test all authentication endpoints exist."""
-        assert hasattr(Endpoints, 'LOGIN')
-        assert hasattr(Endpoints, 'LOGOUT')
+        assert hasattr(Endpoints, "LOGIN")
+        assert hasattr(Endpoints, "LOGOUT")
 
     def test_all_cart_endpoints_exist(self):
         """Test all cart endpoints exist."""
-        assert hasattr(Endpoints, 'CART')
+        assert hasattr(Endpoints, "CART")
 
     def test_all_product_endpoints_exist(self):
         """Test all product endpoints exist."""
-        assert hasattr(Endpoints, 'SEARCH')
+        assert hasattr(Endpoints, "SEARCH")
         # These are now classmethod builders
-        assert callable(getattr(Endpoints, 'product_ai_summary', None))
-        assert callable(getattr(Endpoints, 'product_composition', None))
-        assert callable(getattr(Endpoints, 'product_price', None))
-        assert callable(getattr(Endpoints, 'shopping_list', None))
+        assert callable(getattr(Endpoints, "product_ai_summary", None))
+        assert callable(getattr(Endpoints, "product_composition", None))
+        assert callable(getattr(Endpoints, "product_price", None))
+        assert callable(getattr(Endpoints, "shopping_list", None))
 
     def test_all_delivery_endpoints_exist(self):
         """Test all delivery endpoints exist."""
-        assert hasattr(Endpoints, 'DELIVERY')
-        assert hasattr(Endpoints, 'TIMESLOT_RESERVATION')
-        assert hasattr(Endpoints, 'DELIVERY_ANNOUNCEMENTS')
+        assert hasattr(Endpoints, "DELIVERY")
+        assert hasattr(Endpoints, "TIMESLOT_RESERVATION")
+        assert hasattr(Endpoints, "DELIVERY_ANNOUNCEMENTS")
         # timeslots is now a classmethod builder
-        assert callable(getattr(Endpoints, 'timeslots', None))
+        assert callable(getattr(Endpoints, "timeslots", None))
 
     def test_all_order_endpoints_exist(self):
         """Test all order endpoints exist."""
-        assert hasattr(Endpoints, 'NEXT_ORDER')
-        assert hasattr(Endpoints, 'LAST_ORDER')
+        assert hasattr(Endpoints, "NEXT_ORDER")
+        assert hasattr(Endpoints, "LAST_ORDER")
         # delivered_orders is now a classmethod builder
-        assert callable(getattr(Endpoints, 'delivered_orders', None))
+        assert callable(getattr(Endpoints, "delivered_orders", None))
 
     def test_all_account_endpoints_exist(self):
         """Test all account endpoints exist."""
-        assert hasattr(Endpoints, 'PREMIUM_PROFILE')
-        assert hasattr(Endpoints, 'BAGS')
-        assert hasattr(Endpoints, 'ANNOUNCEMENTS')
+        assert hasattr(Endpoints, "PREMIUM_PROFILE")
+        assert hasattr(Endpoints, "BAGS")
+        assert hasattr(Endpoints, "ANNOUNCEMENTS")
 
     def test_all_recipe_endpoints_exist(self):
         """Test all recipe endpoints exist."""
-        assert hasattr(Endpoints, 'INGREDIENT_PRODUCTS')
+        assert hasattr(Endpoints, "INGREDIENT_PRODUCTS")
         # These are now classmethod builders
-        assert callable(getattr(Endpoints, 'recipe_search', None))
-        assert callable(getattr(Endpoints, 'recipe_detail', None))
+        assert callable(getattr(Endpoints, "recipe_search", None))
+        assert callable(getattr(Endpoints, "recipe_detail", None))
 
 
 class TestEndpointsRecipeBuilders:
@@ -178,5 +176,3 @@ class TestEndpointsProductBuilders:
         result = Endpoints.product_price(1425155)
         assert "/1425155/" in result
         assert "prices" in result
-
-

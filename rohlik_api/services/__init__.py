@@ -1,11 +1,11 @@
-"""Services package for Rohlik.cz API."""
+"""Services package for the Rohlik.cz API client."""
 
+from .account import AccountService
 from .base import BaseService
 from .cart import CartService
-from .products import ProductService
-from .orders import OrderService
 from .delivery import DeliveryService
-from .account import AccountService
+from .orders import OrderService
+from .products import ProductService
 from .recipes import RecipeService
 
 __all__ = [

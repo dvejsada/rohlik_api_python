@@ -1,15 +1,50 @@
-# Rohlik API Python Client
+# 🛒 Rohlik API Python Client
 
-An async Python client library for interacting with the Rohlik.cz API using httpx with HTTP/2 support.
+An async, fully typed Python client for the [Rohlik.cz](https://www.rohlik.cz)
+online grocery service — search products, manage your cart, browse recipes
+(Rohlík Chef), and read your orders and deliveries, all from Python.
+
+> ## ⚠️ Unofficial — personal use only
+>
+> This is an **unofficial** client for Rohlik.cz's **non-public** API. It is
+> **not affiliated with, authorized by, or endorsed by Rohlik.cz / Rohlik Group**.
+>
+> - Intended for **personal, non-commercial use with your own account** only.
+> - The private API can change or break **at any time, without notice**.
+> - Your use may be subject to **Rohlik.cz's Terms of Service** — review them and
+>   behave responsibly (don't hammer the API or use it commercially).
+> - Provided "as is", with **no warranty**. **Use at your own risk.**
+
+## Table of contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Credentials & security](#credentials--security)
+- [Typed models](#typed-models)
+- [Services](#services)
+- [API reference](#api-reference)
+- [Error handling](#error-handling)
+- [Advanced usage](#advanced-usage)
+- [Development](#development)
+- [Disclaimer](#disclaimer)
+- [License](#license)
 
 ## Features
 
-- 🚀 HTTP/2 support for improved performance
-- 🔐 Secure authentication with automatic session management
-- 🎯 Clean service-based API architecture
-- 🔄 Async context manager support
-- 🍳 Recipe search and ingredient products (Rohlík Chef)
-- 📦 Product details, composition, and AI summaries
+- 🚀 HTTP/2 support for fast, connection-reused requests
+- 🔐 Automatic login/logout and session management
+- 🎯 Clean, service-based API (`client.cart`, `client.products`, …)
+- 🧩 Fully typed dataclass models for parsed responses (`py.typed`)
+- 🔄 Works as an async context manager
+- 🍳 Recipe search and ingredient shopping (Rohlík Chef)
+- 📦 Product details, composition/nutrition, prices, and AI summaries
+
+## Requirements
+
+- Python 3.13+
+- [httpx](https://www.python-httpx.org/) with HTTP/2 (installed automatically)
 
 ## Installation
 
@@ -17,7 +52,7 @@ An async Python client library for interacting with the Rohlik.cz API using http
 pip install rohlik-api
 ```
 
-## Quick Start
+## Quick start
 
 ```python
 import asyncio
@@ -25,166 +60,208 @@ from rohlik_api import RohlikAPI
 
 async def main():
     async with RohlikAPI(username="your_email@example.com", password="your_password") as client:
-        # Search for products
+        # Search for products (returns a SearchResults model)
         results = await client.products.search("mleko", limit=5)
-        print(f"Search results: {results}")
-        
-        # Get cart contents
+        for product in results.results:
+            print(f"{product.name} - {product.price}")
+
+        # Get cart contents (returns a Cart model)
         cart = await client.cart.get_content()
-        print(f"Cart: {cart}")
-        
-        # Get delivery information
-        delivery = await client.delivery.get_info()
-        print(f"Delivery: {delivery}")
-        
-        # Search recipes
+        print(f"Cart total: {cart.total_price} ({cart.total_items} items)")
+
+        # Search recipes (returns a RecipeSearchResults model)
         recipes = await client.recipes.search("rajská", limit=5)
-        print(f"Recipes: {recipes}")
+        print(f"Found {recipes.total_hits} recipes")
 
 asyncio.run(main())
 ```
 
-## Configuration
+The async context manager logs you in on entry and logs out + closes the
+connection on exit.
+
+## Credentials & security
+
+The client authenticates with your normal Rohlik.cz **email and password**.
+
+- **Never hard-code credentials** in source you commit. Prefer environment
+  variables or a secrets manager:
+
+  ```python
+  import os
+  from rohlik_api import RohlikAPI
+
+  client = RohlikAPI(
+      username=os.environ["ROHLIK_USERNAME"],
+      password=os.environ["ROHLIK_PASSWORD"],
+  )
+  ```
+
+- Credentials are only ever sent to Rohlik.cz over HTTPS. This library does not
+  store or transmit them anywhere else.
+- Use a dedicated account if you're uncomfortable automating your primary one.
+
+## Typed models
+
+Service methods that parse responses return typed dataclasses (importable from
+`rohlik_api`) rather than raw dictionaries, so your editor and type checker know
+the shape of the data:
 
 ```python
-from rohlik_api import RohlikAPI
+from dataclasses import asdict
+from rohlik_api import Cart, SearchResults
 
-client = RohlikAPI(
-    username="your_email@example.com",
-    password="your_password",
-    base_url="https://www.rohlik.cz",  # Optional
-    timeout=30.0,                       # Optional
-    headers={"Custom-Header": "Value"}, # Optional
-    auto_login=True                     # Optional, default True
-)
+cart = await client.cart.get_content()   # -> Cart
+cart.total_price                         # float
+cart.products[0].name                    # str
+
+# Convert any model to a plain dict (e.g. for JSON / Home Assistant / MCP):
+asdict(cart)
 ```
+
+Raw passthrough endpoints (`orders.*`, `delivery.*`, `account.get_premium_profile`,
+`account.get_bags_info`, `account.get_announcements`, and `get_data`) return the
+decoded JSON as `dict` / `list`, since they are not reshaped by the client.
 
 ## Services
 
-The client provides access to functionality through service properties:
+Functionality is grouped into services, accessed as properties on the client:
 
-| Service | Property | Description |
-|---------|----------|-------------|
-| Cart | `client.cart` | Shopping cart operations |
-| Products | `client.products` | Product search and details |
-| Orders | `client.orders` | Order history |
-| Delivery | `client.delivery` | Delivery info and timeslots |
-| Account | `client.account` | Account data and shopping lists |
-| Recipes | `client.recipes` | Recipe search and ingredients (Rohlík Chef) |
+| Service  | Property           | Description                                   |
+| -------- | ------------------ | --------------------------------------------- |
+| Cart     | `client.cart`      | Shopping cart operations                      |
+| Products | `client.products`  | Product search and details                    |
+| Orders   | `client.orders`    | Order history                                 |
+| Delivery | `client.delivery`  | Delivery info and timeslots                   |
+| Account  | `client.account`   | Account data and shopping lists               |
+| Recipes  | `client.recipes`   | Recipe search and ingredients (Rohlík Chef)   |
 
-## API Reference
+## API reference
 
-### Cart Service (`client.cart`)
+### Cart service (`client.cart`)
 
 ```python
 # Get cart contents
 cart = await client.cart.get_content()
-# Returns: {"total_price": 199.90, "total_items": 3, "can_make_order": True, "products": [...]}
+# -> Cart(total_price=199.90, total_items=3, can_make_order=True, products=[CartItem, ...])
 
 # Add items to cart
-result = await client.cart.add_items([
+added = await client.cart.add_items([
     {"product_id": 123456, "quantity": 2},
-    {"product_id": 789012, "quantity": 1}
+    {"product_id": 789012, "quantity": 1},
 ])
-# Returns: {"added_products": [123456, 789012]}
+# -> [123456, 789012]   (list of product IDs successfully added)
 
-# Delete item from cart
+# Delete item from cart (raises APIRequestFailedError on failure)
 await client.cart.delete_item(order_field_id="abc123")
 ```
 
-### Products Service (`client.products`)
+### Products service (`client.products`)
 
 ```python
-# Search for products
+# Search for products -> SearchResults | None (None only on request failure)
 results = await client.products.search("mléko", limit=10, favourite=False)
-# Returns: {"search_results": [{"id": 123, "name": "...", "price": "29.90 Kč", ...}]}
+for product in results.results:  # ProductSearchResult: id, name, price, brand, amount
+    print(product.name, product.price)
 
-# Get AI-generated product summary
+# AI-generated product summary -> AISummary | None
 summary = await client.products.get_ai_summary(product_id=1384964)
-# Returns: {"product_id": 1384964, "title": "AI Souhrn", "content": "..."}
 
-# Get product composition (nutritional values, allergens)
+# Composition / nutrition / allergens -> ProductComposition | None
 composition = await client.products.get_composition(product_id=1425155)
-# Returns: {"nutritional_values": [...], "ingredients": "...", "allergens": {...}}
 
-# Get product price
+# Current price -> ProductPrice | None
 price = await client.products.get_price(product_id=1425155)
-# Returns: {"product_id": 1425155, "price": 40.9, "currency": "CZK", "price_per_unit": 340.83}
 ```
 
-### Orders Service (`client.orders`)
+### Orders service (`client.orders`)
 
 ```python
-# Get next (upcoming) order
-next_order = await client.orders.get_next()
-
-# Get last delivered order
-last_order = await client.orders.get_last()
-
-# Get delivered orders with pagination
-orders = await client.orders.get_delivered(limit=50, offset=0)
+next_order = await client.orders.get_next()                       # upcoming order
+last_order = await client.orders.get_last()                       # last delivered order
+orders = await client.orders.get_delivered(limit=50, offset=0)    # history
 ```
 
-### Delivery Service (`client.delivery`)
+### Delivery service (`client.delivery`)
 
 ```python
-# Get delivery information
 delivery = await client.delivery.get_info()
-
-# Get current timeslot reservation
 timeslot = await client.delivery.get_timeslot_reservation()
-
-# Get next available delivery slots
 slots = await client.delivery.get_next_slots()
-
-# Get delivery announcements
 announcements = await client.delivery.get_announcements()
 ```
 
-### Account Service (`client.account`)
+### Account service (`client.account`)
 
 ```python
-# Get premium profile
 premium = await client.account.get_premium_profile()
-
-# Get reusable bags info
 bags = await client.account.get_bags_info()
-
-# Get announcements
 announcements = await client.account.get_announcements()
 
-# Get shopping list by ID
+# Shopping list by ID -> ShoppingList
 shopping_list = await client.account.get_shopping_list("list_id_here")
-# Returns: {"name": "My List", "products_in_list": [...]}
+# ShoppingList(name="My List", products_in_list=[...])
 ```
 
-### Recipes Service (`client.recipes`)
+### Recipes service (`client.recipes`) — Rohlík Chef
 
 ```python
-# Search for recipes
+# Search recipes -> RecipeSearchResults(recipes=[RecipeSummary, ...], total_hits=4)
 recipes = await client.recipes.search("rajská", limit=10, offset=0)
-# Returns: {"recipes": [{"id": 59, "name": "Rajská omáčka", "image": "...", ...}], "total_hits": 4}
 
-# Get recipe details
+# Recipe details -> RecipeDetail | None
 recipe = await client.recipes.get_detail(recipe_id=59)
-# Returns: {"id": 59, "name": "...", "ingredients": [...], "directions": [...], ...}
 
-# Get products for ingredients
+# Products for ingredients -> IngredientProducts | None
 products = await client.recipes.get_ingredient_products(ingredient_ids=[102, 56], limit=5)
-# Returns: {"ingredients": [{"ingredient_id": 102, "products": [...], "total_hits": 3}]}
 ```
 
-### Aggregated Data
+### Aggregated data
 
 ```python
-# Get all account data in a single operation
+# Fetch delivery, orders, cart, premium profile, announcements, etc. in one call
 all_data = await client.get_data()
-# Returns dict with: login, delivery, next_order, last_order, cart, premium_profile, etc.
 ```
 
-## Advanced Usage
+## Error handling
 
-### Manual Session Management
+All errors derive from `RohlikAPIError`:
+
+```python
+from rohlik_api import RohlikAPI, InvalidCredentialsError, APIRequestFailedError
+
+try:
+    async with RohlikAPI(username="email@example.com", password="password") as client:
+        cart = await client.cart.get_content()
+except InvalidCredentialsError:
+    print("Wrong username or password")
+except APIRequestFailedError as err:
+    print(f"Request failed: {err}")
+```
+
+**Error contract:**
+
+- **Critical / mutating operations** (login, `cart.get_content`, `cart.delete_item`,
+  `account.get_shopping_list`) **raise** `APIRequestFailedError` on failure.
+- **Read / optional fetches** (most `orders`, `delivery`, `account`, `products`,
+  and `recipes` getters) **return `None`** on failure, so an aggregate fetch can
+  continue gracefully.
+
+## Advanced usage
+
+### Configuration
+
+```python
+client = RohlikAPI(
+    username="your_email@example.com",
+    password="your_password",
+    base_url="https://www.rohlik.cz",  # optional
+    timeout=30.0,                       # optional
+    headers={"Custom-Header": "Value"}, # optional
+    auto_login=True,                    # optional, default True
+)
+```
+
+### Manual session management
 
 ```python
 from rohlik_api import RohlikAPI
@@ -193,20 +270,46 @@ async def main():
     client = RohlikAPI(
         username="email@example.com",
         password="password",
-        auto_login=False  # Disable auto-login
+        auto_login=False,  # disable auto-login
     )
     try:
-        await client._auth.login()
+        await client.login()
         cart = await client.cart.get_content()
-        await client._auth.logout()
+        await client.logout()
     finally:
         await client.close()
 ```
 
+## Development
+
+```bash
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Run the test suite
+pytest
+
+# Lint, format check and type check
+ruff check .
+black --check .
+mypy rohlik_api
+```
+
+Please make sure `pytest`, `ruff`, `black` and `mypy` all pass before opening a
+pull request.
+
+## Disclaimer
+
+This project is an **independent, unofficial** client. It is **not affiliated
+with, authorized by, or endorsed by Rohlik.cz, Rohlik Group, or any of its
+subsidiaries**. "Rohlik", "Rohlik.cz" and "Rohlík Chef" are trademarks of their
+respective owners.
+
+It talks to a **private, undocumented API** that may change or stop working at
+any time. It is provided for **personal, non-commercial use** only, and comes
+with **no warranty of any kind**. You are responsible for complying with
+Rohlik.cz's Terms of Service and applicable law. **Use at your own risk.**
+
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+[MIT](LICENSE) © Daniel Vejsada

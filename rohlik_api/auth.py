@@ -1,14 +1,16 @@
 """Authentication manager for Rohlik.cz API."""
 
+from __future__ import annotations
+
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 import httpx
 
-from .http_client import HttpClient
 from .endpoints import Endpoints
-from .errors import InvalidCredentialsError, RohlikAPIError, APIRequestFailedError
+from .errors import APIRequestFailedError, InvalidCredentialsError, RohlikAPIError
 from .helpers import mask_data
+from .http_client import HttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,8 +40,9 @@ class AuthManager:
         self._password = password
 
         self._is_logged_in: bool = False
-        self._user_id: Optional[int] = None
-        self._address_id: Optional[int] = None
+        self._user_id: int | None = None
+        self._address_id: int | None = None
+        self._login_response: dict[str, Any] = {}
 
     @property
     def is_logged_in(self) -> bool:
@@ -47,19 +50,20 @@ class AuthManager:
         return self._is_logged_in
 
     @property
-    def user_id(self) -> Optional[int]:
+    def user_id(self) -> int | None:
         """Get the current user ID."""
         return self._user_id
 
     @property
-    def address_id(self) -> Optional[int]:
+    def address_id(self) -> int | None:
         """Get the current address ID."""
         return self._address_id
 
-    async def login(self) -> Dict[str, Any]:
+    async def login(self) -> dict[str, Any]:
         """Authenticate with the Rohlik.cz service.
 
-        If already logged in, returns cached response without making a new request.
+        If already logged in, returns the cached login response from the most
+        recent successful login without making a new request.
 
         Returns:
             dict: The JSON response containing authentication data
@@ -70,47 +74,49 @@ class AuthManager:
         """
         if self._is_logged_in:
             _LOGGER.debug("Already logged in, skipping login request")
-            return {"status": 200, "message": "Already logged in"}
+            return self._login_response
 
-        login_data = {
-            "email": self._username,
-            "password": self._password,
-            "name": ""
-        }
+        login_data = {"email": self._username, "password": self._password, "name": ""}
 
         try:
             response = await self._http.post(Endpoints.LOGIN, json=login_data)
-            login_response = response.json()
+            login_response: dict[str, Any] = response.json()
 
             if login_response.get("status") != 200:
+                messages = login_response.get("messages", [])
                 if login_response.get("status") == 401:
-                    messages = login_response.get("messages", [])
-                    error_msg = messages[0].get("content", "Invalid credentials") if messages else "Invalid credentials"
+                    error_msg = (
+                        messages[0].get("content", "Invalid credentials")
+                        if messages
+                        else "Invalid credentials"
+                    )
                     raise InvalidCredentialsError(error_msg)
-                else:
-                    messages = login_response.get("messages", [])
-                    error_msg = messages[0].get("content", "Unknown error") if messages else "Unknown error"
-                    raise RohlikAPIError(f"Unknown error occurred during login: {error_msg}")
+                error_msg = (
+                    messages[0].get("content", "Unknown error") if messages else "Unknown error"
+                )
+                raise RohlikAPIError(f"Unknown error occurred during login: {error_msg}")
 
             self._is_logged_in = True
+            self._login_response = login_response
 
-            # Extract user and address IDs
+            # Extract user and address IDs. ``address`` may be explicitly null
+            # in the response, so guard with ``or {}``.
             data = login_response.get("data", {})
-            if not self._user_id:
-                self._user_id = data.get("user", {}).get("id")
-
-            if not self._address_id:
-                try:
-                    self._address_id = data.get("address", {}).get("id")
-                except AttributeError:
-                    _LOGGER.error(f"Address cannot be retrieved from login data. Login response: {mask_data(login_response)}")
+            self._user_id = data.get("user", {}).get("id")
+            self._address_id = (data.get("address") or {}).get("id")
+            if self._address_id is None:
+                _LOGGER.debug(
+                    "No address ID in login data. Login response: %s",
+                    mask_data(login_response),
+                )
 
             return login_response
 
         except httpx.HTTPError as err:
             raise APIRequestFailedError(
-                f"Cannot connect to website! Check your internet connection and try again: {err}"
-            )
+                f"Cannot connect to website! Check your internet connection "
+                f"and try again: {err}"
+            ) from err
 
     async def logout(self) -> None:
         """Log out from the Rohlik.cz service.
@@ -130,15 +136,28 @@ class AuthManager:
             if logout_response.get("status") != 200:
                 raise RohlikAPIError(f"Unknown error occurred during logout: {logout_response}")
 
-            self._is_logged_in = False
+            self._reset_session()
 
         except httpx.HTTPError as err:
-            self._is_logged_in = False  # Reset state even on error
+            self._reset_session()  # Reset state even on error
             raise APIRequestFailedError(
-                f"Cannot connect to website! Check your internet connection and try again: {err}"
-            )
+                f"Cannot connect to website! Check your internet connection "
+                f"and try again: {err}"
+            ) from err
 
     async def ensure_logged_in(self) -> None:
         """Ensure the client is logged in, login if not."""
         if not self._is_logged_in:
             await self.login()
+
+    def _reset_session(self) -> None:
+        """Clear all session state so the next login re-fetches it.
+
+        User and address IDs are cleared too, so that reusing the same instance
+        across logins picks up a changed delivery address instead of keeping a
+        stale value.
+        """
+        self._is_logged_in = False
+        self._user_id = None
+        self._address_id = None
+        self._login_response = {}

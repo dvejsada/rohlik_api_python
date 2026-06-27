@@ -1,10 +1,11 @@
 """Tests for the RecipeService class."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from rohlik_api.http_client import HttpClient
+import pytest
+
 from rohlik_api.auth import AuthManager
+from rohlik_api.http_client import HttpClient
 from rohlik_api.services.recipes import RecipeService
 
 
@@ -29,7 +30,6 @@ def mock_auth():
 class TestRecipeServiceSearch:
     """Tests for RecipeService.search method."""
 
-    @pytest.mark.asyncio
     async def test_search_returns_recipes(self, mock_http, mock_auth):
         """Test search returns properly formatted recipe data."""
         mock_response = MagicMock()
@@ -54,10 +54,10 @@ class TestRecipeServiceSearch:
                         "isFavorite": True,
                         "isNew": False,
                         "isBestSeller": True,
-                    }
+                    },
                 ],
-                "totalHits": 2
-            }
+                "totalHits": 2,
+            },
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.get.return_value = mock_response
@@ -66,17 +66,17 @@ class TestRecipeServiceSearch:
         result = await service.search("rajská")
 
         assert result is not None
-        assert len(result["recipes"]) == 2
-        assert result["total_hits"] == 2
-        assert result["recipes"][0]["id"] == 59
-        assert result["recipes"][0]["name"] == "Rajská omáčka s hovězím masem"
-        assert result["recipes"][0]["is_new"] is True
-        assert result["recipes"][1]["is_favorite"] is True
+        assert len(result.recipes) == 2
+        assert result.total_hits == 2
+        assert result.recipes[0].id == 59
+        assert result.recipes[0].name == "Rajská omáčka s hovězím masem"
+        assert result.recipes[0].is_new is True
+        assert result.recipes[1].is_favorite is True
 
-    @pytest.mark.asyncio
     async def test_search_returns_none_on_error(self, mock_http, mock_auth):
         """Test search returns None when request fails."""
         import httpx
+
         mock_http.get.side_effect = httpx.HTTPError("Connection failed")
 
         service = RecipeService(mock_http, mock_auth)
@@ -84,7 +84,6 @@ class TestRecipeServiceSearch:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_search_with_pagination(self, mock_http, mock_auth):
         """Test search passes pagination parameters."""
         mock_response = MagicMock()
@@ -104,7 +103,6 @@ class TestRecipeServiceSearch:
 class TestRecipeServiceGetDetail:
     """Tests for RecipeService.get_detail method."""
 
-    @pytest.mark.asyncio
     async def test_get_detail_returns_recipe(self, mock_http, mock_auth):
         """Test get_detail returns properly formatted recipe details."""
         mock_response = MagicMock()
@@ -116,10 +114,7 @@ class TestRecipeServiceGetDetail:
                 "duration": "Do hodinky",
                 "servings": [{"name": "4 PORCE", "default": True}],
                 "image": {"path": "/images/meals/large/59.jpg"},
-                "author": {
-                    "name": "Roman Vaněk",
-                    "annotation": "Test annotation"
-                },
+                "author": {"name": "Roman Vaněk", "annotation": "Test annotation"},
                 "tips": [{"content": "Tip 1"}, {"content": "Tip 2"}],
                 "ingredients": [
                     {
@@ -131,9 +126,9 @@ class TestRecipeServiceGetDetail:
                                 "ingredientId": 56,
                                 "ingredientName": "2 větší mrkve",
                                 "productsCount": 4,
-                                "imgPath": "/images/mrkev.jpg"
+                                "imgPath": "/images/mrkev.jpg",
                             }
-                        ]
+                        ],
                     }
                 ],
                 "directions": [
@@ -142,13 +137,13 @@ class TestRecipeServiceGetDetail:
                         "position": 0,
                         "steps": [
                             {"stepNumber": 1, "content": "Step 1 content"},
-                            {"stepNumber": 2, "content": "Step 2 content"}
-                        ]
+                            {"stepNumber": 2, "content": "Step 2 content"},
+                        ],
                     }
                 ],
                 "isFavorite": False,
-                "link": "/chef/59-rajska-omacka"
-            }
+                "link": "/chef/59-rajska-omacka",
+            },
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.get.return_value = mock_response
@@ -157,20 +152,20 @@ class TestRecipeServiceGetDetail:
         result = await service.get_detail(59)
 
         assert result is not None
-        assert result["id"] == 59
-        assert result["name"] == "Rajská omáčka s hovězím masem"
-        assert result["duration"] == "Do hodinky"
-        assert result["author"]["name"] == "Roman Vaněk"
-        assert len(result["tips"]) == 2
-        assert len(result["ingredients"]) == 1
-        assert result["ingredients"][0]["items"][0]["ingredient_id"] == 56
-        assert len(result["directions"]) == 1
-        assert len(result["directions"][0]["steps"]) == 2
+        assert result.id == 59
+        assert result.name == "Rajská omáčka s hovězím masem"
+        assert result.duration == "Do hodinky"
+        assert result.author.name == "Roman Vaněk"
+        assert len(result.tips) == 2
+        assert len(result.ingredients) == 1
+        assert result.ingredients[0].items[0].ingredient_id == 56
+        assert len(result.directions) == 1
+        assert len(result.directions[0].steps) == 2
 
-    @pytest.mark.asyncio
     async def test_get_detail_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_detail returns None when request fails."""
         import httpx
+
         mock_http.get.side_effect = httpx.HTTPError("Connection failed")
 
         service = RecipeService(mock_http, mock_auth)
@@ -182,7 +177,6 @@ class TestRecipeServiceGetDetail:
 class TestRecipeServiceGetIngredientProducts:
     """Tests for RecipeService.get_ingredient_products method."""
 
-    @pytest.mark.asyncio
     async def test_get_ingredient_products_returns_data(self, mock_http, mock_auth):
         """Test get_ingredient_products returns properly formatted data."""
         mock_response = MagicMock()
@@ -201,7 +195,7 @@ class TestRecipeServiceGetIngredientProducts:
                                 "unit": "kg",
                                 "textualAmount": "cca 1,2 kg",
                                 "inStock": True,
-                                "favourite": True
+                                "favourite": True,
                             },
                             {
                                 "productId": 1313889,
@@ -211,13 +205,13 @@ class TestRecipeServiceGetIngredientProducts:
                                 "unit": "ks",
                                 "textualAmount": "1 ks",
                                 "inStock": True,
-                                "favourite": False
-                            }
+                                "favourite": False,
+                            },
                         ],
-                        "totalHits": 3
+                        "totalHits": 3,
                     }
                 ]
-            }
+            },
         }
         mock_response.raise_for_status = MagicMock()
         mock_http.post.return_value = mock_response
@@ -226,15 +220,14 @@ class TestRecipeServiceGetIngredientProducts:
         result = await service.get_ingredient_products([102])
 
         assert result is not None
-        assert len(result["ingredients"]) == 1
-        assert result["ingredients"][0]["ingredient_id"] == 102
-        assert len(result["ingredients"][0]["products"]) == 2
-        assert result["ingredients"][0]["products"][0]["product_id"] == 1350675
-        assert result["ingredients"][0]["products"][0]["price"] == "41.88 Kč"
-        assert result["ingredients"][0]["products"][0]["in_stock"] is True
-        assert result["ingredients"][0]["products"][0]["is_favorite"] is True
+        assert len(result.ingredients) == 1
+        assert result.ingredients[0].ingredient_id == 102
+        assert len(result.ingredients[0].products) == 2
+        assert result.ingredients[0].products[0].product_id == 1350675
+        assert result.ingredients[0].products[0].price == "41.88 Kč"
+        assert result.ingredients[0].products[0].in_stock is True
+        assert result.ingredients[0].products[0].is_favorite is True
 
-    @pytest.mark.asyncio
     async def test_get_ingredient_products_sends_correct_payload(self, mock_http, mock_auth):
         """Test get_ingredient_products sends correct payload."""
         mock_response = MagicMock()
@@ -251,10 +244,10 @@ class TestRecipeServiceGetIngredientProducts:
         assert call_kwargs["json"]["limit"] == 10
         assert call_kwargs["json"]["offset"] == 5
 
-    @pytest.mark.asyncio
     async def test_get_ingredient_products_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_ingredient_products returns None when request fails."""
         import httpx
+
         mock_http.post.side_effect = httpx.HTTPError("Connection failed")
 
         service = RecipeService(mock_http, mock_auth)

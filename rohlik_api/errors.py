@@ -1,17 +1,13 @@
-"""Custom exceptions for Rohlik.cz API client."""
+"""Custom exceptions for the Rohlik.cz API client."""
 
 
 class RohlikAPIError(Exception):
-    """Base exception for Rohlik API errors."""
-    pass
+    """Base exception for all Rohlik API errors."""
 
 
 class InvalidCredentialsError(RohlikAPIError):
     """Raised when login credentials are invalid."""
-    pass
 
 
 class APIRequestFailedError(RohlikAPIError):
-    """Raised when an API request fails."""
-    pass
-
+    """Raised when an API request fails (network or HTTP error)."""
