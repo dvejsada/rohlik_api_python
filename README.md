@@ -33,8 +33,8 @@ online grocery service — search products, manage your cart, browse recipes
 
 ## Features
 
-- 🚀 HTTP/2 support for fast, connection-reused requests
-- 🔐 Automatic login/logout and session management
+- 🚀 Built on aiohttp; bring your own session (e.g. Home Assistant's shared session)
+- 🔐 Automatic login/logout, plus transparent re-authentication when a session expires (HTTP 401)
 - 🎯 Clean, service-based API (`client.cart`, `client.products`, …)
 - 🧩 Fully typed dataclass models for parsed responses (`py.typed`)
 - 🔄 Works as an async context manager
@@ -44,7 +44,7 @@ online grocery service — search products, manage your cart, browse recipes
 ## Requirements
 
 - Python 3.13+
-- [httpx](https://www.python-httpx.org/) with HTTP/2 (installed automatically)
+- [aiohttp](https://docs.aiohttp.org/) (installed automatically)
 
 ## Installation
 
@@ -171,6 +171,12 @@ composition = await client.products.get_composition(product_id=1425155)
 
 # Current price -> ProductPrice | None
 price = await client.products.get_price(product_id=1425155)
+
+# Raw product detail (brand, attributes, …) -> dict | None (None on 404)
+detail = await client.products.get_detail(product_id=1425155)
+
+# Category hierarchy -> list[dict] | None (None if discontinued / 404)
+categories = await client.products.get_categories(product_id=1425155)
 ```
 
 ### Orders service (`client.orders`)
@@ -178,7 +184,9 @@ price = await client.products.get_price(product_id=1425155)
 ```python
 next_order = await client.orders.get_next()                       # upcoming order
 last_order = await client.orders.get_last()                       # last delivered order
-orders = await client.orders.get_delivered(limit=50, offset=0)    # history
+orders = await client.orders.get_delivered(limit=50, offset=0)    # one history page
+all_orders = await client.orders.get_all_delivered()              # every page, paginated
+detail = await client.orders.get_detail(order_id=12345678)        # full order incl. items
 ```
 
 ### Delivery service (`client.delivery`)
@@ -279,6 +287,32 @@ async def main():
     finally:
         await client.close()
 ```
+
+### Reusing an existing aiohttp session
+
+The client is built on [aiohttp](https://docs.aiohttp.org/). By default it
+creates and owns its own `ClientSession`, but you can inject an externally
+managed session instead — useful inside a Home Assistant integration, where
+the recommended pattern is to share a single session per instance. An injected
+session is **never** closed by the client; its lifecycle stays with the owner.
+
+```python
+import aiohttp
+from rohlik_api import RohlikAPI
+
+async def main(session: aiohttp.ClientSession):
+    client = RohlikAPI(
+        username="email@example.com",
+        password="password",
+        session=session,  # reuse the caller's session
+    )
+    async with client:
+        cart = await client.cart.get_content()
+    # `session` is left open for the caller to close.
+```
+
+Inside a Home Assistant integration you would pass the shared session, for
+example `RohlikAPI(..., session=async_get_clientsession(hass))`.
 
 ## Development
 

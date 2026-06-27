@@ -5,12 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from .endpoints import Endpoints
 from .errors import APIRequestFailedError, InvalidCredentialsError, RohlikAPIError
 from .helpers import mask_data
-from .http_client import HttpClient
+from .http_client import HTTP_ERRORS, HttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +110,7 @@ class AuthManager:
 
             return login_response
 
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             raise APIRequestFailedError(
                 f"Cannot connect to website! Check your internet connection "
                 f"and try again: {err}"
@@ -138,7 +136,7 @@ class AuthManager:
 
             self._reset_session()
 
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             self._reset_session()  # Reset state even on error
             raise APIRequestFailedError(
                 f"Cannot connect to website! Check your internet connection "
@@ -149,6 +147,18 @@ class AuthManager:
         """Ensure the client is logged in, login if not."""
         if not self._is_logged_in:
             await self.login()
+
+    async def relogin(self) -> dict[str, Any]:
+        """Force a fresh login after a session expiry (HTTP 401).
+
+        Clears the cached session state so :meth:`login` performs a new request
+        instead of returning the stale cached response, then logs in again.
+
+        Returns:
+            dict: The JSON response from the new login.
+        """
+        self._reset_session()
+        return await self.login()
 
     def _reset_session(self) -> None:
         """Clear all session state so the next login re-fetches it.

@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from ..endpoints import Endpoints
 from ..errors import APIRequestFailedError
+from ..http_client import HTTP_ERRORS
 from ..models import ShoppingList
 from .base import BaseService
 
@@ -66,6 +65,6 @@ class AccountService(BaseService):
             response = await self._http.get(url)
             response.raise_for_status()
             return ShoppingList.from_api(response.json())
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.error("Request failed: %s", err)
             raise APIRequestFailedError(f"Request failed: {err}") from err

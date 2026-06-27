@@ -5,6 +5,11 @@ provides a ``from_api`` classmethod that parses the relevant slice of a Rohlik
 API response. All models are plain dataclasses, so ``dataclasses.asdict`` can be
 used to convert them back to JSON-serialisable dictionaries (useful for the
 Home Assistant integration and the MCP server).
+
+Monetary amounts come in two shapes: ``price`` fields typed as ``str`` are
+pre-formatted for display (for example ``"29.90 Kč"``), while numeric ``price``
+fields are raw amounts paired with a separate ``currency``. Czech crowns (CZK,
+"Kč") are the usual currency.
 """
 
 from __future__ import annotations
@@ -21,7 +26,19 @@ from .helpers import format_price
 
 @dataclass(slots=True)
 class CartItem:
-    """A single item in the shopping cart."""
+    """A single item (line) in the shopping cart.
+
+    Attributes:
+        id: The product ID, as a string.
+        cart_item_id: The cart-line identifier (``orderFieldId``). Pass this to
+            :meth:`~rohlik_api.RohlikAPI.cart`'s ``delete_item`` to remove the
+            line from the cart.
+        name: Product name.
+        quantity: Number of units of this product in the cart.
+        price: Line price for this product, in the account currency (CZK).
+        category_name: Primary category name of the product.
+        brand: Brand name, or an empty string if unknown.
+    """
 
     id: str
     cart_item_id: str
@@ -47,7 +64,16 @@ class CartItem:
 
 @dataclass(slots=True)
 class Cart:
-    """The current shopping cart."""
+    """The current shopping cart.
+
+    Attributes:
+        total_price: Total price of the cart, in the account currency (CZK).
+        total_items: Number of distinct products in the cart (line count, not
+            the summed quantity).
+        can_make_order: Whether the cart currently satisfies the conditions to
+            place an order (e.g. the minimum order value is met).
+        products: The cart's line items.
+    """
 
     total_price: float
     total_items: int
@@ -74,7 +100,17 @@ class Cart:
 
 @dataclass(slots=True)
 class ProductSearchResult:
-    """A product entry from a search response."""
+    """A single product entry from a search response.
+
+    Attributes:
+        id: Product ID. Use it with ``cart.add_items`` or the
+            ``products.get_*`` lookups.
+        name: Product name.
+        price: Pre-formatted price string, e.g. ``"29.90 Kč"`` (empty if the
+            API omitted price information).
+        brand: Brand name, if known.
+        amount: Textual packaging/amount, e.g. ``"500 g"``.
+    """
 
     id: int | None
     name: str | None
@@ -96,14 +132,26 @@ class ProductSearchResult:
 
 @dataclass(slots=True)
 class SearchResults:
-    """Container for product search results."""
+    """Container for product search results.
+
+    Attributes:
+        results: The matched products, in ranked order. Empty if nothing
+            matched the search term.
+    """
 
     results: list[ProductSearchResult] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class AISummary:
-    """AI-generated summary for a product."""
+    """AI-generated summary for a product.
+
+    Attributes:
+        product_id: The product the summary is for.
+        rating: Rohlik's rating bucket for the summary (e.g. ``"EMPTY"``).
+        title: Summary title (localised, e.g. ``"AI Souhrn"``).
+        content: The summary text.
+    """
 
     product_id: int | None
     rating: str | None
@@ -123,7 +171,23 @@ class AISummary:
 
 @dataclass(slots=True)
 class NutritionalValue:
-    """Nutritional values for a single portion."""
+    """Nutritional values for a single portion.
+
+    Every amount is expressed for the stated :attr:`portion`. Any value the API
+    omits is ``None``.
+
+    Attributes:
+        portion: The reference portion these values describe, e.g. ``"100 g"``.
+        energy_kj: Energy in kilojoules (kJ).
+        energy_kcal: Energy in kilocalories (kcal).
+        fats: Total fat, in grams.
+        saturated_fats: Saturated fat, in grams.
+        carbohydrates: Carbohydrates, in grams.
+        sugars: Sugars, in grams.
+        protein: Protein, in grams.
+        salt: Salt, in grams.
+        fiber: Fibre, in grams.
+    """
 
     portion: str | None
     energy_kj: float | None
@@ -161,7 +225,13 @@ class NutritionalValue:
 
 @dataclass(slots=True)
 class Allergens:
-    """Allergen information for a product."""
+    """Allergen information for a product.
+
+    Attributes:
+        contained: Allergens the product definitely contains.
+        possibly_contained: Allergens that may be present (e.g. traces from
+            shared production lines).
+    """
 
     contained: list[str] = field(default_factory=list)
     possibly_contained: list[str] = field(default_factory=list)
@@ -169,7 +239,15 @@ class Allergens:
 
 @dataclass(slots=True)
 class ProductComposition:
-    """Composition and nutritional information for a product."""
+    """Composition and nutritional information for a product.
+
+    Attributes:
+        product_id: The product this composition is for.
+        nutritional_values: Nutrition broken down by portion (one entry per
+            portion size the API provides).
+        ingredients: Plain-text ingredient list, if available.
+        allergens: Allergen information.
+    """
 
     product_id: int | None
     nutritional_values: list[NutritionalValue] = field(default_factory=list)
@@ -195,7 +273,16 @@ class ProductComposition:
 
 @dataclass(slots=True)
 class ProductPrice:
-    """Current price information for a product."""
+    """Current price information for a product.
+
+    Attributes:
+        product_id: The product this price is for.
+        price: Current price as a number, expressed in :attr:`currency`.
+        currency: ISO currency code, e.g. ``"CZK"``.
+        price_per_unit: Price per base unit (e.g. per kg or per litre), in
+            :attr:`currency`.
+        sales: Raw list of active sales/discounts, in the API's own shape.
+    """
 
     product_id: int | None
     price: float | None
@@ -223,7 +310,17 @@ class ProductPrice:
 
 @dataclass(slots=True)
 class RecipeSummary:
-    """A recipe entry from a recipe search response."""
+    """A recipe entry from a recipe search response.
+
+    Attributes:
+        id: Recipe ID. Use it with ``recipes.get_detail``.
+        name: Recipe name.
+        link: Relative web path to the recipe on rohlik.cz.
+        image: Relative path to the recipe image.
+        is_favorite: Whether the recipe is marked as a favourite by the user.
+        is_new: Whether the recipe is flagged as new.
+        is_best_seller: Whether the recipe is flagged as a best seller.
+    """
 
     id: int | None
     name: str | None
@@ -249,7 +346,13 @@ class RecipeSummary:
 
 @dataclass(slots=True)
 class RecipeSearchResults:
-    """Container for recipe search results."""
+    """Container for recipe search results.
+
+    Attributes:
+        recipes: The matched recipes for this page of results.
+        total_hits: Total number of matching recipes (may exceed
+            ``len(recipes)`` because results are paginated).
+    """
 
     recipes: list[RecipeSummary] = field(default_factory=list)
     total_hits: int = 0
@@ -266,7 +369,17 @@ class RecipeSearchResults:
 
 @dataclass(slots=True)
 class IngredientItem:
-    """A single ingredient within a recipe ingredient group."""
+    """A single ingredient within a recipe ingredient group.
+
+    Attributes:
+        name: Ingredient display name.
+        ingredient_id: Ingredient ID. Pass it to ``recipes.get_ingredient_products``
+            to find purchasable products for this ingredient.
+        ingredient_name: Textual amount and name, e.g. ``"2 větší mrkve"``.
+        products_count: Number of purchasable products available for this
+            ingredient.
+        image: Relative path to the ingredient image.
+    """
 
     name: str | None
     ingredient_id: int | None
@@ -288,7 +401,13 @@ class IngredientItem:
 
 @dataclass(slots=True)
 class IngredientGroup:
-    """A named group of recipe ingredients."""
+    """A named group of recipe ingredients.
+
+    Attributes:
+        name: Group name, e.g. ``"HOVĚZÍ VÝVAR"``.
+        position: Ordering index of the group within the recipe.
+        items: The ingredients belonging to this group.
+    """
 
     name: str | None
     position: int | None
@@ -306,7 +425,12 @@ class IngredientGroup:
 
 @dataclass(slots=True)
 class DirectionStep:
-    """A single step in a recipe direction section."""
+    """A single step in a recipe direction section.
+
+    Attributes:
+        step_number: 1-based step number within its section.
+        content: The step's instruction text.
+    """
 
     step_number: int | None
     content: str | None
@@ -319,7 +443,13 @@ class DirectionStep:
 
 @dataclass(slots=True)
 class DirectionSection:
-    """A named section of recipe directions."""
+    """A named section of recipe directions.
+
+    Attributes:
+        name: Section name, e.g. ``"POSTUP"``.
+        position: Ordering index of the section within the recipe.
+        steps: The ordered steps in this section.
+    """
 
     name: str | None
     position: int | None
@@ -337,7 +467,12 @@ class DirectionSection:
 
 @dataclass(slots=True)
 class RecipeAuthor:
-    """Author of a recipe."""
+    """Author of a recipe.
+
+    Attributes:
+        name: Author name.
+        annotation: Short note or bio about the author.
+    """
 
     name: str | None
     annotation: str | None
@@ -345,11 +480,27 @@ class RecipeAuthor:
 
 @dataclass(slots=True)
 class RecipeDetail:
-    """Detailed information about a recipe."""
+    """Detailed information about a recipe.
+
+    Attributes:
+        id: Recipe ID.
+        name: Recipe name.
+        duration: Human-readable preparation time, e.g. ``"Do hodinky"``
+            ("within an hour"). This is a display string, not a number.
+        servings: Raw list of serving options, in the API's own shape (each
+            entry typically has ``name`` and ``default``).
+        image: Relative path to the recipe image.
+        author: The recipe's author.
+        tips: Free-text tips for preparing the recipe.
+        ingredients: Ingredients, grouped into named sections.
+        directions: Cooking directions, grouped into named sections of steps.
+        is_favorite: Whether the recipe is marked as a favourite by the user.
+        link: Relative web path to the recipe on rohlik.cz.
+    """
 
     id: int | None
     name: str | None
-    duration: int | None
+    duration: str | None
     servings: list[Any] = field(default_factory=list)
     image: str | None = None
     author: RecipeAuthor = field(default_factory=lambda: RecipeAuthor(None, None))
@@ -383,7 +534,21 @@ class RecipeDetail:
 
 @dataclass(slots=True)
 class IngredientProduct:
-    """A purchasable product matched to a recipe ingredient."""
+    """A purchasable product matched to a recipe ingredient.
+
+    Attributes:
+        product_id: Product ID. Use it with ``cart.add_items``.
+        name: Product name.
+        image: Relative path to the product image.
+        price: Pre-formatted price string, e.g. ``"41.88 Kč"``.
+        price_value: The raw numeric price (the ``full`` amount) behind
+            :attr:`price`.
+        unit: Base unit the product is sold in, e.g. ``"kg"`` or ``"ks"``
+            (pieces).
+        amount: Textual amount, e.g. ``"cca 1,2 kg"``.
+        in_stock: Whether the product is currently in stock.
+        is_favorite: Whether the product is marked as a favourite by the user.
+    """
 
     product_id: int | None
     name: str | None
@@ -414,7 +579,14 @@ class IngredientProduct:
 
 @dataclass(slots=True)
 class IngredientProductGroup:
-    """Products available for a single ingredient."""
+    """Products available for a single recipe ingredient.
+
+    Attributes:
+        ingredient_id: The ingredient these products are matched to.
+        products: The purchasable products for this ingredient (this page).
+        total_hits: Total number of products available for the ingredient (may
+            exceed ``len(products)`` because results are paginated).
+    """
 
     ingredient_id: int | None
     products: list[IngredientProduct] = field(default_factory=list)
@@ -432,7 +604,11 @@ class IngredientProductGroup:
 
 @dataclass(slots=True)
 class IngredientProducts:
-    """Container for ingredient product groups."""
+    """Container mapping recipe ingredients to purchasable products.
+
+    Attributes:
+        ingredients: One group per requested ingredient ID.
+    """
 
     ingredients: list[IngredientProductGroup] = field(default_factory=list)
 
@@ -454,7 +630,13 @@ class IngredientProducts:
 
 @dataclass(slots=True)
 class ShoppingList:
-    """A saved shopping list."""
+    """A saved shopping list.
+
+    Attributes:
+        name: The shopping list's name.
+        products_in_list: Raw list of product entries on the list, in the API's
+            own shape (each entry typically has ``productId`` and ``quantity``).
+    """
 
     name: str | None
     products_in_list: list[Any] = field(default_factory=list)

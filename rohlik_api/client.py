@@ -6,12 +6,12 @@ import logging
 from types import TracebackType
 from typing import Any
 
-import httpx
+import aiohttp
 
 from .auth import AuthManager
 from .endpoints import BASE_URL
 from .errors import APIRequestFailedError
-from .http_client import HttpClient
+from .http_client import HTTP_ERRORS, HttpClient
 from .services import (
     AccountService,
     CartService,
@@ -27,9 +27,9 @@ _LOGGER = logging.getLogger(__name__)
 class RohlikAPI:
     """Async client for interacting with the Rohlik.cz API.
 
-    The client uses httpx with HTTP/2 support and exposes a service-based API
-    for all operations. When used as an async context manager with
-    ``auto_login=True`` (the default), it logs in on entry and logs out on exit.
+    The client is built on aiohttp and exposes a service-based API for all
+    operations. When used as an async context manager with ``auto_login=True``
+    (the default), it logs in on entry and logs out on exit.
 
     Args:
         username: Email address used for Rohlik.cz login (required).
@@ -39,6 +39,9 @@ class RohlikAPI:
         headers: Optional custom headers to include in all requests.
         auto_login: If True (default), log in automatically when used as a
             context manager.
+        session: Optional externally managed :class:`aiohttp.ClientSession` to
+            reuse (for example Home Assistant's shared session). When provided,
+            the session is not closed by this client.
 
     Attributes:
         cart (CartService): Cart operations (get_content, add_items, delete_item).
@@ -51,7 +54,9 @@ class RohlikAPI:
     Example:
         >>> async with RohlikAPI("user@example.com", "password") as client:
         ...     cart = await client.cart.get_content()
-        ...     print(cart["total_price"])
+        ...     print(cart.total_price, cart.total_items)
+        ...     for item in cart.products:
+        ...         print(item.name, item.quantity, item.price)
     """
 
     def __init__(
@@ -62,6 +67,7 @@ class RohlikAPI:
         timeout: float = 30.0,
         headers: dict[str, str] | None = None,
         auto_login: bool = True,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
         # Credential validation is owned by AuthManager (constructed below),
         # which raises ValueError on empty username/password.
@@ -74,6 +80,7 @@ class RohlikAPI:
             base_url=base_url,
             timeout=timeout,
             headers=headers,
+            session=session,
         )
 
         # Initialize auth manager
@@ -82,6 +89,10 @@ class RohlikAPI:
             username=username,
             password=password,
         )
+
+        # Wire up transparent re-authentication: when any request hits HTTP 401
+        # (expired session), the HTTP client re-logs in and retries once.
+        self._http.set_unauthorized_handler(self._auth.relogin)
 
         # Initialize services
         self._cart = CartService(self._http, self._auth)
@@ -126,9 +137,9 @@ class RohlikAPI:
         return self._recipes
 
     @property
-    def client(self) -> httpx.AsyncClient:
-        """Get or create the underlying async HTTP client."""
-        return self._http.client
+    def session(self) -> aiohttp.ClientSession:
+        """Get or create the underlying aiohttp session."""
+        return self._http.session
 
     @property
     def is_logged_in(self) -> bool:
@@ -232,7 +243,7 @@ class RohlikAPI:
 
             return result
 
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             raise APIRequestFailedError(
                 f"Cannot connect to website! Check your internet connection "
                 f"and try again: {err}"

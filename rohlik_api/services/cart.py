@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from ..endpoints import Endpoints
 from ..errors import APIRequestFailedError
+from ..http_client import HTTP_ERRORS
 from ..models import Cart
 from .base import BaseService
 
@@ -33,7 +32,7 @@ class CartService(BaseService):
             response = await self._http.get(Endpoints.CART)
             response.raise_for_status()
             return Cart.from_api(response.json())
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.error("Request failed: %s", err)
             raise APIRequestFailedError(f"Failed to fetch cart: {err}") from err
 
@@ -64,7 +63,7 @@ class CartService(BaseService):
                 response = await self._http.post(Endpoints.CART, json=cart_payload)
                 response.raise_for_status()
                 added_products.append(product_id)
-            except httpx.HTTPError as err:
+            except HTTP_ERRORS as err:
                 _LOGGER.warning("Error adding %s due to %s", product_id, err)
 
         return added_products
@@ -86,6 +85,6 @@ class CartService(BaseService):
                 Endpoints.CART, params={"orderFieldId": order_field_id}
             )
             response.raise_for_status()
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.error("Error deleting item with orderFieldId %s: %s", order_field_id, err)
             raise APIRequestFailedError(f"Failed to delete item from cart: {err}") from err
