@@ -60,8 +60,9 @@ class OrderService(BaseService):
             page_size: Number of orders fetched per request.
 
         Returns:
-            list: All delivered orders (empty if there are none or the first
-            page fails).
+            list: All delivered orders (empty if there are none). If a request
+            fails partway through pagination, the orders gathered so far are
+            returned and a warning is logged, so the result may be incomplete.
         """
         await self._ensure_logged_in()
 
@@ -69,8 +70,16 @@ class OrderService(BaseService):
         offset = 0
         while True:
             page = await self.get_delivered(limit=page_size, offset=offset)
-            if not page:
+            if page is None:
+                # Request error (already logged by get_delivered): stop and
+                # return what we have rather than silently looping forever.
+                _LOGGER.warning(
+                    "Stopped paginating delivered orders at offset %s; result may be incomplete",
+                    offset,
+                )
                 break
+            if not page:
+                break  # Empty page: genuinely no more orders.
             all_orders.extend(page)
             if len(page) < page_size:
                 break

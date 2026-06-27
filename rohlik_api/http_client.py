@@ -100,6 +100,9 @@ class HttpClient:
 
         self._on_unauthorized = on_unauthorized
         self._reauth_lock = asyncio.Lock()
+        # Bumped each time a re-auth completes, so coroutines that queued on the
+        # lock behind an in-flight re-auth can skip a redundant second login.
+        self._reauth_generation = 0
 
     def set_unauthorized_handler(self, handler: Callable[[], Awaitable[Any]] | None) -> None:
         """Register the callback used to re-authenticate on an HTTP 401."""
@@ -107,10 +110,17 @@ class HttpClient:
 
     @property
     def session(self) -> aiohttp.ClientSession:
-        """Get or lazily create the underlying aiohttp session."""
-        if self._session is None or self._session.closed:
+        """Get or lazily create the underlying aiohttp session.
+
+        Only sessions this client owns are (re)created. An injected session that
+        has been closed by its owner is returned as-is, so the next request
+        surfaces aiohttp's "Session is closed" error instead of silently
+        spawning a new session that bypasses the owner's connector/SSL config.
+        """
+        if self._owns_session and (self._session is None or self._session.closed):
             self._session = aiohttp.ClientSession()
-            self._owns_session = True
+        # Owned sessions are created above; injected ones are set in __init__.
+        assert self._session is not None
         return self._session
 
     @property
@@ -186,7 +196,10 @@ class HttpClient:
         merged_headers = self._merge_headers(headers)
 
         async def _send() -> tuple[int, bytes, aiohttp.ClientResponse]:
-            response = await self.session.request(
+            # ``async with`` guarantees the connection is released on every
+            # path, including if ``read()`` raises mid-response. Buffering the
+            # body here also lets ``Response.json`` work after release.
+            async with self.session.request(
                 method,
                 url,
                 params=prepared_params,
@@ -194,12 +207,9 @@ class HttpClient:
                 json=json_data,
                 headers=merged_headers,
                 timeout=self._timeout,
-            )
-            # Buffer the body so the connection is released regardless of how
-            # the caller consumes the response, and so ``Response.json`` works
-            # later.
-            body = await response.read()
-            return response.status, body, response
+            ) as response:
+                body = await response.read()
+                return response.status, body, response
 
         status, body, response = await _send()
 
@@ -208,9 +218,15 @@ class HttpClient:
             and self._on_unauthorized is not None
             and endpoint not in self._NO_REAUTH_ENDPOINTS
         ):
-            # Serialize re-auth so concurrent 401s trigger a single login.
+            # Serialize re-auth, and use a generation counter so that several
+            # requests that all hit a 401 at once trigger only one login: the
+            # first through the lock re-authenticates, the rest see the bumped
+            # generation and just retry.
+            seen_generation = self._reauth_generation
             async with self._reauth_lock:
-                await self._on_unauthorized()
+                if self._reauth_generation == seen_generation:
+                    await self._on_unauthorized()
+                    self._reauth_generation += 1
             status, body, response = await _send()
 
         return Response(status, body, response)

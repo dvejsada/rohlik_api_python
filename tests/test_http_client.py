@@ -1,5 +1,6 @@
 """Tests for the HttpClient class."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import aiohttp
@@ -9,11 +10,19 @@ from rohlik_api.http_client import HttpClient
 
 
 class _FakeResponse:
-    """Minimal stand-in for an aiohttp ClientResponse."""
+    """Minimal stand-in for an aiohttp ClientResponse (also its own CM)."""
 
     def __init__(self, status: int, body: bytes = b"{}") -> None:
         self.status = status
         self._body = body
+
+    async def __aenter__(self) -> "_FakeResponse":
+        # Yield control so concurrent requests can interleave deterministically.
+        await asyncio.sleep(0)
+        return self
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
 
     async def read(self) -> bytes:
         return self._body
@@ -24,16 +33,34 @@ class _FakeResponse:
 
 
 class _FakeSession:
-    """Fake aiohttp session that yields a scripted sequence of responses."""
+    """Fake aiohttp session that yields a scripted sequence of responses.
+
+    ``request`` returns the response object directly (not a coroutine), so it
+    works with ``async with session.request(...)`` like the real client.
+    """
 
     def __init__(self, responses: list[_FakeResponse]) -> None:
         self._responses = list(responses)
         self.closed = False
         self.calls: list[tuple[str, str]] = []
 
-    async def request(self, method: str, url: str, **kwargs: object) -> _FakeResponse:
+    def request(self, method: str, url: str, **kwargs: object) -> _FakeResponse:
         self.calls.append((method, url))
         return self._responses.pop(0)
+
+
+class _CountingSession:
+    """Fake session whose first ``fail_first`` requests return 401, rest 200."""
+
+    def __init__(self, fail_first: int) -> None:
+        self.fail_first = fail_first
+        self.count = 0
+        self.closed = False
+
+    def request(self, method: str, url: str, **kwargs: object) -> _FakeResponse:
+        self.count += 1
+        status = 401 if self.count <= self.fail_first else 200
+        return _FakeResponse(status)
 
 
 class TestHttpClientInitialization:
@@ -154,6 +181,17 @@ class TestHttpClientInjectedSession:
         finally:
             await session.close()
 
+    async def test_closed_injected_session_is_not_replaced(self):
+        """A closed injected session is returned as-is, never silently replaced."""
+        session = aiohttp.ClientSession()
+        await session.close()
+        http = HttpClient(session=session)
+
+        # The client must not spawn a new owned session in place of the
+        # caller's (now closed) one.
+        assert http.session is session
+        assert http.is_closed is True
+
 
 class TestHttpClientReauth:
     """Tests for transparent re-authentication on HTTP 401."""
@@ -206,6 +244,29 @@ class TestHttpClientReauth:
 
         handler.assert_not_awaited()
         assert len(session.calls) == 1
+
+    async def test_concurrent_401s_trigger_single_reauth(self):
+        """Several requests hitting 401 at once re-authenticate only once."""
+        # Both initial requests 401; both retries succeed -> 4 requests total.
+        session = _CountingSession(fail_first=2)
+        calls = 0
+
+        async def handler() -> None:
+            nonlocal calls
+            calls += 1
+            await asyncio.sleep(0)  # hold the lock long enough to overlap
+
+        http = HttpClient(session=session)
+        http.set_unauthorized_handler(handler)
+
+        responses = await asyncio.gather(
+            http.get("/api/v3/orders/upcoming"),
+            http.get("/api/v3/orders/delivered"),
+        )
+
+        assert calls == 1
+        assert all(r.status == 200 for r in responses)
+        assert session.count == 4
 
 
 class TestHttpClientContextManager:
