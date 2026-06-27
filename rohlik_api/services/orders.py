@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from ..endpoints import Endpoints
+from ..http_client import HTTP_ERRORS
 from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,6 +49,6 @@ class OrderService(BaseService):
             response.raise_for_status()
             orders: list[dict[str, Any]] = response.json()
             return orders
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching delivered orders: %s", err)
             return None

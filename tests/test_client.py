@@ -19,7 +19,7 @@ class TestClientInitialization:
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
         assert client.base_url == "https://www.rohlik.cz"
         assert client.timeout == 30.0
-        assert client._http._client is None  # Lazy initialization
+        assert client._http._session is None  # Lazy initialization
 
     def test_client_with_credentials(self):
         """Test client initializes with username and password."""
@@ -65,13 +65,14 @@ class TestClientInitialization:
         assert "Accept" in client._http._headers
         assert client._http._headers["Accept"] == "application/json"
 
-    def test_client_lazy_initialization(self):
-        """Test that client is lazily initialized."""
+    async def test_client_lazy_initialization(self):
+        """Test that the session is lazily initialized."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD)
-        assert client._http._client is None
-        # Accessing client property creates the client
-        _ = client.client
-        assert client._http._client is not None
+        assert client._http._session is None
+        # Accessing the session property creates the session
+        _ = client.session
+        assert client._http._session is not None
+        await client.close()
 
     def test_client_base_url_trailing_slash(self):
         """Test that trailing slash is removed from base URL."""
@@ -94,9 +95,9 @@ class TestAsyncContextManager:
     async def test_client_close(self):
         """Test that client closes without error."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
-        _ = client.client  # Create the client
+        _ = client.session  # Create the session
         await client.close()
-        assert client._http._client is None
+        assert client._http._session is None
 
 
 class TestMaskData:

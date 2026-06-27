@@ -5,12 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from .endpoints import Endpoints
 from .errors import APIRequestFailedError, InvalidCredentialsError, RohlikAPIError
 from .helpers import mask_data
-from .http_client import HttpClient
+from .http_client import HTTP_ERRORS, HttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +110,7 @@ class AuthManager:
 
             return login_response
 
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             raise APIRequestFailedError(
                 f"Cannot connect to website! Check your internet connection "
                 f"and try again: {err}"
@@ -138,7 +136,7 @@ class AuthManager:
 
             self._reset_session()
 
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             self._reset_session()  # Reset state even on error
             raise APIRequestFailedError(
                 f"Cannot connect to website! Check your internet connection "

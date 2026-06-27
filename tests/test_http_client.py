@@ -1,5 +1,7 @@
 """Tests for the HttpClient class."""
 
+import aiohttp
+
 from rohlik_api import BASE_URL
 from rohlik_api.http_client import HttpClient
 
@@ -12,7 +14,7 @@ class TestHttpClientInitialization:
         client = HttpClient()
         assert client.base_url == BASE_URL
         assert client.timeout == 30.0
-        assert client._client is None
+        assert client._session is None
 
     def test_custom_base_url(self):
         """Test HttpClient with custom base URL."""
@@ -49,52 +51,78 @@ class TestHttpClientInitialization:
 class TestHttpClientLazyInitialization:
     """Tests for HttpClient lazy initialization."""
 
-    def test_client_is_none_initially(self):
-        """Test that internal client is None before first use."""
+    def test_session_is_none_initially(self):
+        """Test that internal session is None before first use."""
         http = HttpClient()
-        assert http._client is None
+        assert http._session is None
 
-    def test_client_created_on_access(self):
-        """Test that accessing client property creates the client."""
+    async def test_session_created_on_access(self):
+        """Test that accessing the session property creates the session."""
         http = HttpClient()
-        _ = http.client
-        assert http._client is not None
+        assert http.session is not None
+        assert http._session is not None
+        await http.close()
 
     def test_is_closed_initially_true(self):
-        """Test that is_closed returns True when client not created."""
+        """Test that is_closed returns True when session not created."""
         http = HttpClient()
         assert http.is_closed is True
 
-    def test_is_closed_false_after_access(self):
-        """Test that is_closed returns False after client created."""
+    async def test_is_closed_false_after_access(self):
+        """Test that is_closed returns False after session created."""
         http = HttpClient()
-        _ = http.client
+        _ = http.session
         assert http.is_closed is False
+        await http.close()
 
 
 class TestHttpClientClose:
     """Tests for HttpClient close functionality."""
 
-    async def test_close_without_client(self):
-        """Test closing when client was never created."""
+    async def test_close_without_session(self):
+        """Test closing when session was never created."""
         http = HttpClient()
         await http.close()  # Should not raise
-        assert http._client is None
+        assert http._session is None
 
-    async def test_close_with_client(self):
-        """Test closing after client was created."""
+    async def test_close_with_session(self):
+        """Test closing after the session was created."""
         http = HttpClient()
-        _ = http.client  # Create client
+        _ = http.session  # Create session
         await http.close()
-        assert http._client is None
+        assert http._session is None
 
     async def test_close_multiple_times(self):
         """Test that closing multiple times is safe."""
         http = HttpClient()
-        _ = http.client
+        _ = http.session
         await http.close()
         await http.close()  # Should not raise
-        assert http._client is None
+        assert http._session is None
+
+
+class TestHttpClientInjectedSession:
+    """Tests for reusing an externally managed aiohttp session."""
+
+    async def test_injected_session_is_used(self):
+        """An injected session is returned instead of creating a new one."""
+        session = aiohttp.ClientSession()
+        try:
+            http = HttpClient(session=session)
+            assert http.session is session
+            assert http.is_closed is False
+        finally:
+            await session.close()
+
+    async def test_close_does_not_close_injected_session(self):
+        """Closing the client must not close an externally owned session."""
+        session = aiohttp.ClientSession()
+        try:
+            http = HttpClient(session=session)
+            await http.close()
+            assert session.closed is False
+        finally:
+            await session.close()
 
 
 class TestHttpClientContextManager:
@@ -107,8 +135,8 @@ class TestHttpClientContextManager:
             assert isinstance(http, HttpClient)
 
     async def test_context_manager_closes_on_exit(self):
-        """Test that context manager closes client on exit."""
+        """Test that context manager closes the session on exit."""
         http = HttpClient()
         async with http:
-            _ = http.client  # Ensure client is created
-        assert http._client is None
+            _ = http.session  # Ensure session is created
+        assert http._session is None

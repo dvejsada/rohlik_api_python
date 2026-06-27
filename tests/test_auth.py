@@ -9,7 +9,7 @@ from rohlik_api.http_client import HttpClient
 
 
 def _response(payload):
-    """Build a mock httpx response returning the given JSON payload."""
+    """Build a mock response returning the given JSON payload."""
     resp = MagicMock()
     resp.json.return_value = payload
     return resp

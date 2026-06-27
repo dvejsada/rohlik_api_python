@@ -1,6 +1,6 @@
 """Rohlik.cz API Python Client.
 
-An async Python client for the Rohlik.cz API, built on httpx with HTTP/2 support.
+An async Python client for the Rohlik.cz API, built on aiohttp.
 """
 
 from .auth import AuthManager

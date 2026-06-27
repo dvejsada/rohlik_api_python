@@ -5,10 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from ..auth import AuthManager
-from ..http_client import HttpClient
+from ..http_client import HTTP_ERRORS, HttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +58,6 @@ class BaseService:
             response.raise_for_status()
             data: dict[str, Any] = response.json()
             return data
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching %s: %s", error_context, err)
             return None

@@ -141,9 +141,9 @@ class TestProductService:
 
     async def test_search_returns_none_on_error(self, mock_http, mock_auth):
         """Test search returns None when the request fails."""
-        import httpx
+        import aiohttp
 
-        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
         result = await service.search("test")
@@ -202,9 +202,9 @@ class TestProductService:
 
     async def test_get_ai_summary_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_ai_summary returns None on error."""
-        import httpx
+        import aiohttp
 
-        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
         result = await service.get_ai_summary(1384964)
@@ -255,9 +255,9 @@ class TestProductService:
 
     async def test_get_composition_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_composition returns None on error."""
-        import httpx
+        import aiohttp
 
-        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
         result = await service.get_composition(1425155)
@@ -288,9 +288,9 @@ class TestProductService:
 
     async def test_get_price_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_price returns None on error."""
-        import httpx
+        import aiohttp
 
-        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
 
         service = ProductService(mock_http, mock_auth)
         result = await service.get_price(1425155)

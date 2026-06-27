@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 
-import httpx
-
 from ..endpoints import Endpoints
+from ..http_client import HTTP_ERRORS
 from ..models import AISummary, ProductComposition, ProductPrice, ProductSearchResult, SearchResults
 from .base import BaseService
 
@@ -48,7 +47,7 @@ class ProductService(BaseService):
             response = await self._http.get(Endpoints.SEARCH, params=search_payload)
             response.raise_for_status()
             found_products = response.json().get("data", {}).get("productList", [])
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.warning("Request failed: %s", err)
             return None
 
@@ -85,7 +84,7 @@ class ProductService(BaseService):
             response = await self._http.get(Endpoints.product_ai_summary(product_id))
             response.raise_for_status()
             return AISummary.from_api(response.json())
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching AI summary for product %s: %s", product_id, err)
             return None
 
@@ -104,7 +103,7 @@ class ProductService(BaseService):
             response = await self._http.get(Endpoints.product_composition(product_id))
             response.raise_for_status()
             return ProductComposition.from_api(response.json())
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching composition for product %s: %s", product_id, err)
             return None
 
@@ -123,6 +122,6 @@ class ProductService(BaseService):
             response = await self._http.get(Endpoints.product_price(product_id))
             response.raise_for_status()
             return ProductPrice.from_api(response.json())
-        except httpx.HTTPError as err:
+        except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching price for product %s: %s", product_id, err)
             return None

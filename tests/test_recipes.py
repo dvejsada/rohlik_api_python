@@ -75,9 +75,9 @@ class TestRecipeServiceSearch:
 
     async def test_search_returns_none_on_error(self, mock_http, mock_auth):
         """Test search returns None when request fails."""
-        import httpx
+        import aiohttp
 
-        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
 
         service = RecipeService(mock_http, mock_auth)
         result = await service.search("test")
@@ -164,9 +164,9 @@ class TestRecipeServiceGetDetail:
 
     async def test_get_detail_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_detail returns None when request fails."""
-        import httpx
+        import aiohttp
 
-        mock_http.get.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
 
         service = RecipeService(mock_http, mock_auth)
         result = await service.get_detail(59)
@@ -246,9 +246,9 @@ class TestRecipeServiceGetIngredientProducts:
 
     async def test_get_ingredient_products_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_ingredient_products returns None when request fails."""
-        import httpx
+        import aiohttp
 
-        mock_http.post.side_effect = httpx.HTTPError("Connection failed")
+        mock_http.post.side_effect = aiohttp.ClientError("Connection failed")
 
         service = RecipeService(mock_http, mock_auth)
         result = await service.get_ingredient_products([102])
