@@ -119,8 +119,11 @@ class HttpClient:
         """
         if self._owns_session and (self._session is None or self._session.closed):
             self._session = aiohttp.ClientSession()
-        # Owned sessions are created above; injected ones are set in __init__.
-        assert self._session is not None
+        if self._session is None:  # pragma: no cover - unreachable by construction
+            # Owned sessions are created above; injected ones are set in
+            # __init__. A plain ``raise`` (rather than ``assert``) keeps the
+            # invariant enforced even under ``python -O``.
+            raise RuntimeError("HTTP session is unexpectedly missing")
         return self._session
 
     @property
@@ -189,7 +192,9 @@ class HttpClient:
 
         On an HTTP 401 the registered re-auth callback (if any) is invoked once
         and the request is retried, transparently recovering from an expired
-        session on a long-lived client.
+        session on a long-lived client. If the callback raises (re-auth itself
+        failed), the error propagates to the caller and the request is not
+        retried; a subsequent request will attempt re-auth again.
         """
         url = self._build_url(endpoint)
         prepared_params = self._prepare_params(params)

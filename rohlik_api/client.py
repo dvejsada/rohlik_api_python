@@ -54,7 +54,9 @@ class RohlikAPI:
     Example:
         >>> async with RohlikAPI("user@example.com", "password") as client:
         ...     cart = await client.cart.get_content()
-        ...     print(cart["total_price"])
+        ...     print(cart.total_price, cart.total_items)
+        ...     for item in cart.products:
+        ...         print(item.name, item.quantity, item.price)
     """
 
     def __init__(
