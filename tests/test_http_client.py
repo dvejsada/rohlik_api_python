@@ -1,7 +1,5 @@
 """Tests for the HttpClient class."""
 
-import pytest
-
 from rohlik_api import BASE_URL
 from rohlik_api.http_client import HttpClient
 
@@ -77,14 +75,12 @@ class TestHttpClientLazyInitialization:
 class TestHttpClientClose:
     """Tests for HttpClient close functionality."""
 
-    @pytest.mark.asyncio
     async def test_close_without_client(self):
         """Test closing when client was never created."""
         http = HttpClient()
         await http.close()  # Should not raise
         assert http._client is None
 
-    @pytest.mark.asyncio
     async def test_close_with_client(self):
         """Test closing after client was created."""
         http = HttpClient()
@@ -92,7 +88,6 @@ class TestHttpClientClose:
         await http.close()
         assert http._client is None
 
-    @pytest.mark.asyncio
     async def test_close_multiple_times(self):
         """Test that closing multiple times is safe."""
         http = HttpClient()
@@ -105,14 +100,12 @@ class TestHttpClientClose:
 class TestHttpClientContextManager:
     """Tests for HttpClient async context manager."""
 
-    @pytest.mark.asyncio
     async def test_context_manager_entry(self):
         """Test async context manager entry."""
         async with HttpClient() as http:
             assert http is not None
             assert isinstance(http, HttpClient)
 
-    @pytest.mark.asyncio
     async def test_context_manager_closes_on_exit(self):
         """Test that context manager closes client on exit."""
         http = HttpClient()

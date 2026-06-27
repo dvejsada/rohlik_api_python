@@ -42,6 +42,7 @@ class AuthManager:
         self._is_logged_in: bool = False
         self._user_id: int | None = None
         self._address_id: int | None = None
+        self._login_response: dict[str, Any] = {}
 
     @property
     def is_logged_in(self) -> bool:
@@ -61,7 +62,8 @@ class AuthManager:
     async def login(self) -> dict[str, Any]:
         """Authenticate with the Rohlik.cz service.
 
-        If already logged in, returns cached response without making a new request.
+        If already logged in, returns the cached login response from the most
+        recent successful login without making a new request.
 
         Returns:
             dict: The JSON response containing authentication data
@@ -72,7 +74,7 @@ class AuthManager:
         """
         if self._is_logged_in:
             _LOGGER.debug("Already logged in, skipping login request")
-            return {"status": 200, "message": "Already logged in"}
+            return self._login_response
 
         login_data = {"email": self._username, "password": self._password, "name": ""}
 
@@ -95,6 +97,7 @@ class AuthManager:
                 raise RohlikAPIError(f"Unknown error occurred during login: {error_msg}")
 
             self._is_logged_in = True
+            self._login_response = login_response
 
             # Extract user and address IDs
             data = login_response.get("data", {})
@@ -136,10 +139,10 @@ class AuthManager:
             if logout_response.get("status") != 200:
                 raise RohlikAPIError(f"Unknown error occurred during logout: {logout_response}")
 
-            self._is_logged_in = False
+            self._reset_session()
 
         except httpx.HTTPError as err:
-            self._is_logged_in = False  # Reset state even on error
+            self._reset_session()  # Reset state even on error
             raise APIRequestFailedError(
                 f"Cannot connect to website! Check your internet connection "
                 f"and try again: {err}"
@@ -149,3 +152,15 @@ class AuthManager:
         """Ensure the client is logged in, login if not."""
         if not self._is_logged_in:
             await self.login()
+
+    def _reset_session(self) -> None:
+        """Clear all session state so the next login re-fetches it.
+
+        User and address IDs are cleared too, so that reusing the same instance
+        across logins picks up a changed delivery address instead of keeping a
+        stale value.
+        """
+        self._is_logged_in = False
+        self._user_id = None
+        self._address_id = None
+        self._login_response = {}

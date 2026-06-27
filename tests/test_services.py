@@ -47,7 +47,6 @@ class TestBaseService:
         assert service._http == mock_http
         assert service._auth == mock_auth
 
-    @pytest.mark.asyncio
     async def test_ensure_logged_in_calls_auth(self, mock_http, mock_auth):
         """Test _ensure_logged_in delegates to auth manager."""
         service = BaseService(mock_http, mock_auth)
@@ -63,7 +62,6 @@ class TestCartService:
         service = CartService(mock_http, mock_auth)
         assert isinstance(service, BaseService)
 
-    @pytest.mark.asyncio
     async def test_get_content_calls_auth(self, mock_http, mock_auth):
         """Test get_content ensures logged in."""
         mock_response = MagicMock()
@@ -75,7 +73,6 @@ class TestCartService:
         await service.get_content()
         mock_auth.ensure_logged_in.assert_called()
 
-    @pytest.mark.asyncio
     async def test_get_content_returns_formatted_data(self, mock_http, mock_auth):
         """Test get_content returns properly formatted cart data."""
         mock_response = MagicMock()
@@ -107,7 +104,6 @@ class TestCartService:
         assert len(result.products) == 1
         assert result.products[0].name == "Test Product"
 
-    @pytest.mark.asyncio
     async def test_add_items_sends_correct_payload(self, mock_http, mock_auth):
         """Test add_items sends correct payload."""
         mock_response = MagicMock()
@@ -130,7 +126,6 @@ class TestProductService:
         service = ProductService(mock_http, mock_auth)
         assert isinstance(service, BaseService)
 
-    @pytest.mark.asyncio
     async def test_search_returns_empty_when_no_products(self, mock_http, mock_auth):
         """Test search returns empty results when no products found."""
         mock_response = MagicMock()
@@ -144,7 +139,6 @@ class TestProductService:
         assert result is not None
         assert result.results == []
 
-    @pytest.mark.asyncio
     async def test_search_returns_none_on_error(self, mock_http, mock_auth):
         """Test search returns None when the request fails."""
         import httpx
@@ -156,7 +150,6 @@ class TestProductService:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_search_filters_promoted_products(self, mock_http, mock_auth):
         """Test search filters out promoted products."""
         mock_response = MagicMock()
@@ -187,7 +180,6 @@ class TestProductService:
         assert len(result.results) == 1
         assert result.results[0].name == "Regular"
 
-    @pytest.mark.asyncio
     async def test_get_ai_summary_returns_data(self, mock_http, mock_auth):
         """Test get_ai_summary returns properly formatted data."""
         mock_response = MagicMock()
@@ -208,7 +200,6 @@ class TestProductService:
         assert result.title == "AI Souhrn"
         assert "vepřová panenka" in result.content
 
-    @pytest.mark.asyncio
     async def test_get_ai_summary_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_ai_summary returns None on error."""
         import httpx
@@ -220,7 +211,6 @@ class TestProductService:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_get_composition_returns_data(self, mock_http, mock_auth):
         """Test get_composition returns properly formatted data."""
         mock_response = MagicMock()
@@ -263,7 +253,6 @@ class TestProductService:
         assert "Obiloviny obsahující lepek" in result.allergens.contained
         assert "Mléko" in result.allergens.possibly_contained
 
-    @pytest.mark.asyncio
     async def test_get_composition_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_composition returns None on error."""
         import httpx
@@ -275,7 +264,6 @@ class TestProductService:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_get_price_returns_data(self, mock_http, mock_auth):
         """Test get_price returns properly formatted data."""
         mock_response = MagicMock()
@@ -298,7 +286,6 @@ class TestProductService:
         assert result.price_per_unit == 340.83
         assert result.sales == []
 
-    @pytest.mark.asyncio
     async def test_get_price_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_price returns None on error."""
         import httpx
@@ -319,7 +306,6 @@ class TestOrderService:
         service = OrderService(mock_http, mock_auth)
         assert isinstance(service, BaseService)
 
-    @pytest.mark.asyncio
     async def test_get_next_returns_data(self, mock_http, mock_auth):
         """Test get_next returns order data."""
         mock_response = MagicMock()
@@ -332,7 +318,6 @@ class TestOrderService:
 
         assert result == {"order_id": 123}
 
-    @pytest.mark.asyncio
     async def test_get_delivered_with_pagination(self, mock_http, mock_auth):
         """Test get_delivered accepts pagination parameters."""
         mock_response = MagicMock()
@@ -354,7 +339,6 @@ class TestDeliveryService:
         service = DeliveryService(mock_http, mock_auth)
         assert isinstance(service, BaseService)
 
-    @pytest.mark.asyncio
     async def test_get_next_slots_uses_auth_ids(self, mock_http, mock_auth):
         """Test get_next_slots uses user_id and address_id from auth."""
         mock_response = MagicMock()
@@ -371,7 +355,6 @@ class TestDeliveryService:
         assert "userId=12345" in url
         assert "addressId=67890" in url
 
-    @pytest.mark.asyncio
     async def test_get_next_slots_returns_none_without_ids(self, mock_http, mock_auth):
         """Test get_next_slots returns None when IDs are missing."""
         mock_auth.user_id = None
@@ -391,7 +374,6 @@ class TestAccountService:
         service = AccountService(mock_http, mock_auth)
         assert isinstance(service, BaseService)
 
-    @pytest.mark.asyncio
     async def test_get_shopping_list_requires_id(self, mock_http, mock_auth):
         """Test get_shopping_list raises ValueError without ID."""
         service = AccountService(mock_http, mock_auth)
@@ -399,7 +381,6 @@ class TestAccountService:
         with pytest.raises(ValueError, match="Missing argument"):
             await service.get_shopping_list("")
 
-    @pytest.mark.asyncio
     async def test_get_shopping_list_returns_formatted_data(self, mock_http, mock_auth):
         """Test get_shopping_list returns properly formatted data."""
         mock_response = MagicMock()

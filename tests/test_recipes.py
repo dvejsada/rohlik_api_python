@@ -30,7 +30,6 @@ def mock_auth():
 class TestRecipeServiceSearch:
     """Tests for RecipeService.search method."""
 
-    @pytest.mark.asyncio
     async def test_search_returns_recipes(self, mock_http, mock_auth):
         """Test search returns properly formatted recipe data."""
         mock_response = MagicMock()
@@ -74,7 +73,6 @@ class TestRecipeServiceSearch:
         assert result.recipes[0].is_new is True
         assert result.recipes[1].is_favorite is True
 
-    @pytest.mark.asyncio
     async def test_search_returns_none_on_error(self, mock_http, mock_auth):
         """Test search returns None when request fails."""
         import httpx
@@ -86,7 +84,6 @@ class TestRecipeServiceSearch:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_search_with_pagination(self, mock_http, mock_auth):
         """Test search passes pagination parameters."""
         mock_response = MagicMock()
@@ -106,7 +103,6 @@ class TestRecipeServiceSearch:
 class TestRecipeServiceGetDetail:
     """Tests for RecipeService.get_detail method."""
 
-    @pytest.mark.asyncio
     async def test_get_detail_returns_recipe(self, mock_http, mock_auth):
         """Test get_detail returns properly formatted recipe details."""
         mock_response = MagicMock()
@@ -166,7 +162,6 @@ class TestRecipeServiceGetDetail:
         assert len(result.directions) == 1
         assert len(result.directions[0].steps) == 2
 
-    @pytest.mark.asyncio
     async def test_get_detail_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_detail returns None when request fails."""
         import httpx
@@ -182,7 +177,6 @@ class TestRecipeServiceGetDetail:
 class TestRecipeServiceGetIngredientProducts:
     """Tests for RecipeService.get_ingredient_products method."""
 
-    @pytest.mark.asyncio
     async def test_get_ingredient_products_returns_data(self, mock_http, mock_auth):
         """Test get_ingredient_products returns properly formatted data."""
         mock_response = MagicMock()
@@ -234,7 +228,6 @@ class TestRecipeServiceGetIngredientProducts:
         assert result.ingredients[0].products[0].in_stock is True
         assert result.ingredients[0].products[0].is_favorite is True
 
-    @pytest.mark.asyncio
     async def test_get_ingredient_products_sends_correct_payload(self, mock_http, mock_auth):
         """Test get_ingredient_products sends correct payload."""
         mock_response = MagicMock()
@@ -251,7 +244,6 @@ class TestRecipeServiceGetIngredientProducts:
         assert call_kwargs["json"]["limit"] == 10
         assert call_kwargs["json"]["offset"] == 5
 
-    @pytest.mark.asyncio
     async def test_get_ingredient_products_returns_none_on_error(self, mock_http, mock_auth):
         """Test get_ingredient_products returns None when request fails."""
         import httpx

@@ -63,9 +63,8 @@ class RohlikAPI:
         headers: dict[str, str] | None = None,
         auto_login: bool = True,
     ) -> None:
-        if not username or not password:
-            raise ValueError("Username and password are required")
-
+        # Credential validation is owned by AuthManager (constructed below),
+        # which raises ValueError on empty username/password.
         self._auto_login = auto_login
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -196,7 +195,7 @@ class RohlikAPI:
             try:
                 await self._auth.logout()
             except Exception as err:  # noqa: BLE001 - best-effort logout on close
-                _LOGGER.error("Error during logout on close: %s", err)
+                _LOGGER.warning("Error during logout on close: %s", err)
 
         await self._http.close()
 

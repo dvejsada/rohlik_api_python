@@ -84,7 +84,6 @@ class TestClientInitialization:
 class TestAsyncContextManager:
     """Tests for async context manager."""
 
-    @pytest.mark.asyncio
     async def test_async_context_manager(self):
         """Test client works as async context manager."""
         async with RohlikAPI(
@@ -92,7 +91,6 @@ class TestAsyncContextManager:
         ) as client:
             assert client.base_url == "https://www.rohlik.cz"
 
-    @pytest.mark.asyncio
     async def test_client_close(self):
         """Test that client closes without error."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
@@ -148,7 +146,6 @@ class TestClientAuthentication:
         with pytest.raises(ValueError, match="Username and password are required"):
             RohlikAPI(username="", password="")
 
-    @pytest.mark.asyncio
     async def test_get_shopping_list_requires_id(self):
         """Test that get_shopping_list raises ValueError without ID."""
         client = RohlikAPI(username="test@example.com", password="password123", auto_login=False)
@@ -156,7 +153,6 @@ class TestClientAuthentication:
             await client.account.get_shopping_list("")
         await client.close()
 
-    @pytest.mark.asyncio
     async def test_login_delegates_to_auth(self):
         """Test that client.login() delegates to the auth manager."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
@@ -167,7 +163,6 @@ class TestClientAuthentication:
         client._auth.login.assert_awaited_once()
         assert result == {"status": 200}
 
-    @pytest.mark.asyncio
     async def test_logout_delegates_to_auth(self):
         """Test that client.logout() delegates to the auth manager."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=False)
@@ -177,7 +172,6 @@ class TestClientAuthentication:
 
         client._auth.logout.assert_awaited_once()
 
-    @pytest.mark.asyncio
     async def test_context_manager_auto_login(self):
         """Test that entering the context manager logs in when auto_login is True."""
         client = RohlikAPI(username=TEST_USERNAME, password=TEST_PASSWORD, auto_login=True)

@@ -18,6 +18,14 @@ class BaseService:
 
     Provides common functionality like HTTP client access and authentication.
 
+    Error-handling convention:
+        Read-only / optional fetches (most ``get_*`` and ``search`` methods, and
+        anything using :meth:`_fetch_endpoint`) return ``None`` on a request
+        failure, so an aggregate call such as :meth:`RohlikAPI.get_data` can
+        degrade gracefully. Critical or mutating operations (login, logout,
+        ``cart.get_content``, ``cart.delete_item``, ``account.get_shopping_list``)
+        instead raise :class:`~rohlik_api.APIRequestFailedError`.
+
     Args:
         http_client: The HTTP client instance.
         auth_manager: The authentication manager instance.
