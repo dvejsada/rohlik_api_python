@@ -198,7 +198,7 @@ class ProductService(BaseService):
 
         data = payload.get("data", payload) if isinstance(payload, dict) else {}
         product_ids = data.get("products") if isinstance(data, dict) else None
-        if not product_ids:
+        if not isinstance(product_ids, list) or not product_ids:
             return []
 
         return await self.get_cards(product_ids)

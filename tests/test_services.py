@@ -416,6 +416,47 @@ class TestProductService:
         assert await service.get_week_sales() == []
         assert mock_http.get.call_count == 1  # only the week-sales call
 
+    async def test_get_cards_returns_none_on_error(self, mock_http, mock_auth):
+        """get_cards returns None when the request fails."""
+        import aiohttp
+
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
+
+        service = ProductService(mock_http, mock_auth)
+        assert await service.get_cards([1, 2]) is None
+
+    async def test_get_cards_returns_none_on_non_list(self, mock_http, mock_auth):
+        """get_cards returns None when the API response is not a list."""
+        resp = MagicMock()
+        resp.json.return_value = {"unexpected": "shape"}
+        resp.raise_for_status = MagicMock()
+        mock_http.get.return_value = resp
+
+        service = ProductService(mock_http, mock_auth)
+        assert await service.get_cards([1, 2]) is None
+
+    async def test_get_week_sales_returns_none_when_sales_call_fails(self, mock_http, mock_auth):
+        """get_week_sales returns None when the week-sales request fails."""
+        import aiohttp
+
+        mock_http.get.side_effect = aiohttp.ClientError("Connection failed")
+
+        service = ProductService(mock_http, mock_auth)
+        assert await service.get_week_sales() is None
+
+    async def test_get_week_sales_returns_none_when_enrichment_fails(self, mock_http, mock_auth):
+        """get_week_sales returns None when IDs are fetched but the card call fails."""
+        import aiohttp
+
+        sales_resp = MagicMock()
+        sales_resp.json.return_value = {"products": [1353975, 1476819]}
+        sales_resp.raise_for_status = MagicMock()
+        # week-sales succeeds, the enrichment (get_cards) call fails.
+        mock_http.get.side_effect = [sales_resp, aiohttp.ClientError("Connection failed")]
+
+        service = ProductService(mock_http, mock_auth)
+        assert await service.get_week_sales() is None
+
     async def test_get_categories_returns_hierarchy(self, mock_http, mock_auth):
         """Test get_categories returns the inner category list."""
         mock_response = MagicMock()

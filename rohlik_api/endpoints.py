@@ -90,7 +90,7 @@ class Endpoints:
     def product_cards(cls, product_ids: list[int], category_type: str = "normal") -> str:
         """Build the bulk product-card endpoint URL for several products."""
         params = "&".join(f"products={int(pid)}" for pid in product_ids)
-        return f"/api/v1/products/card?{params}&categoryType={category_type}"
+        return f"/api/v1/products/card?{params}&categoryType={quote(category_type, safe='')}"
 
     @classmethod
     def week_sales(cls, page: int = 0, size: int = 30, sort: str = "recommended") -> str:

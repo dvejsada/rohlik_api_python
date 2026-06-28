@@ -359,7 +359,9 @@ class ProductCard:
             currency=prices.get("currency"),
             on_sale=on_sale,
             sale_valid_till=prices.get("saleValidTill"),
-            in_stock=stock.get("availabilityStatus") == "AVAILABLE",
+            # Default to in-stock when the status is absent, matching the field
+            # default (in_stock=True) so hand-built and parsed cards agree.
+            in_stock=stock.get("availabilityStatus", "AVAILABLE") == "AVAILABLE",
         )
 
 
