@@ -87,6 +87,20 @@ class Endpoints:
         return f"/api/v1/products/{product_id}/prices"
 
     @classmethod
+    def product_cards(cls, product_ids: list[int], category_type: str = "normal") -> str:
+        """Build the bulk product-card endpoint URL for several products."""
+        params = "&".join(f"products={int(pid)}" for pid in product_ids)
+        return f"/api/v1/products/card?{params}&categoryType={category_type}"
+
+    @classmethod
+    def week_sales(cls, page: int = 0, size: int = 30, sort: str = "recommended") -> str:
+        """Build the 'deals of the week' (Akce týdne) component URL."""
+        return (
+            f"/api/v1/categories/sales/components/week-sales"
+            f"?page={page}&size={size}&sort={sort}"
+        )
+
+    @classmethod
     def shopping_list(cls, shopping_list_id: str) -> str:
         """Build shopping list endpoint URL."""
         return f"/api/v1/shopping-lists/id/{shopping_list_id}"

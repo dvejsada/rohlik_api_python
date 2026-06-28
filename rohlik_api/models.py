@@ -303,6 +303,66 @@ class ProductPrice:
         )
 
 
+@dataclass(slots=True)
+class ProductCard:
+    """Basic product information from the bulk product-card endpoint.
+
+    A trimmed, meaningful subset of the website's product card — name, packaging
+    and pricing (including any active sale) — with display-only fields dropped.
+
+    Attributes:
+        id: Product ID.
+        name: Product name.
+        brand: Brand name, if known.
+        amount: Textual packaging/amount, e.g. ``"cca 420 g"``.
+        unit: Base unit the product is sold by, e.g. ``"kg"`` or ``"ks"``.
+        price: Current price (the sale price when on sale, otherwise the regular
+            price), in :attr:`currency`.
+        original_price: Regular price before any discount, in :attr:`currency`.
+        unit_price: Price per base unit (e.g. per kg), in :attr:`currency`.
+        currency: ISO currency code, e.g. ``"CZK"``.
+        on_sale: True when the product currently has a sale price.
+        sale_valid_till: ISO timestamp the sale is valid until, if on sale.
+        in_stock: True when the product is available to order.
+    """
+
+    id: int | None
+    name: str | None
+    brand: str | None
+    amount: str | None
+    unit: str | None
+    price: float | None
+    original_price: float | None
+    unit_price: float | None
+    currency: str | None
+    on_sale: bool = False
+    sale_valid_till: str | None = None
+    in_stock: bool = True
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> ProductCard:
+        """Build a :class:`ProductCard` from a product-card entry."""
+        prices = data.get("prices") or {}
+        sale_price = prices.get("salePrice")
+        original_price = prices.get("originalPrice")
+        on_sale = sale_price is not None
+        stock = data.get("stock") or {}
+        return cls(
+            id=data.get("productId"),
+            name=data.get("name"),
+            brand=data.get("brand"),
+            amount=data.get("textualAmount"),
+            unit=data.get("unit"),
+            price=sale_price if on_sale else original_price,
+            original_price=original_price,
+            unit_price=prices.get("unitPrice"),
+            currency=prices.get("currency"),
+            on_sale=on_sale,
+            sale_valid_till=prices.get("saleValidTill"),
+            in_stock=stock.get("availabilityStatus") == "AVAILABLE",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Recipes (Rohlík Chef)
 # ---------------------------------------------------------------------------

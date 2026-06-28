@@ -323,6 +323,99 @@ class TestProductService:
 
         assert result is None
 
+    # Trimmed real payload from /api/v1/products/card: one regular, one on sale.
+    _CARDS = [
+        {
+            "productId": 1353975,
+            "name": "Kachní prso Mulard",
+            "brand": None,
+            "unit": "kg",
+            "textualAmount": "cca 420 g",
+            "prices": {
+                "originalPrice": 293.68,
+                "salePrice": None,
+                "unitPrice": 699.9,
+                "saleValidTill": None,
+                "currency": "CZK",
+            },
+            "stock": {"availabilityStatus": "AVAILABLE"},
+        },
+        {
+            "productId": 1476819,
+            "name": "Amadori BIO Kuřecí prsní plátky innerfilet",
+            "brand": None,
+            "unit": "kg",
+            "textualAmount": "cca 400 g",
+            "prices": {
+                "originalPrice": 321.24,
+                "salePrice": 273.05,
+                "unitPrice": 679.91,
+                "saleValidTill": "2026-07-30T23:59:00+02:00",
+                "currency": "CZK",
+            },
+            "stock": {"availabilityStatus": "AVAILABLE"},
+        },
+    ]
+
+    async def test_get_cards_parses_and_preserves_request_order(self, mock_http, mock_auth):
+        """get_cards maps the card payload and returns it in the requested order."""
+        resp = MagicMock()
+        resp.json.return_value = list(reversed(self._CARDS))  # API order differs
+        resp.raise_for_status = MagicMock()
+        mock_http.get.return_value = resp
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_cards([1353975, 1476819])
+
+        assert [c.id for c in result] == [1353975, 1476819]
+        regular, sale = result
+        assert regular.on_sale is False
+        assert regular.price == 293.68
+        assert regular.amount == "cca 420 g"
+        assert regular.in_stock is True
+        assert sale.on_sale is True
+        assert sale.price == 273.05  # current price is the sale price
+        assert sale.original_price == 321.24
+        assert sale.currency == "CZK"
+        url = mock_http.get.call_args[0][0]
+        assert "/api/v1/products/card?" in url
+        assert "products=1353975" in url and "categoryType=normal" in url
+
+    async def test_get_cards_empty_makes_no_request(self, mock_http, mock_auth):
+        """get_cards short-circuits on an empty id list."""
+        service = ProductService(mock_http, mock_auth)
+        assert await service.get_cards([]) == []
+        mock_http.get.assert_not_called()
+
+    async def test_get_week_sales_enriches_ids(self, mock_http, mock_auth):
+        """get_week_sales resolves the deal ids then enriches them via get_cards."""
+        sales_resp = MagicMock()
+        sales_resp.json.return_value = {"products": [1353975, 1476819]}
+        sales_resp.raise_for_status = MagicMock()
+        cards_resp = MagicMock()
+        cards_resp.json.return_value = self._CARDS
+        cards_resp.raise_for_status = MagicMock()
+        mock_http.get.side_effect = [sales_resp, cards_resp]
+
+        service = ProductService(mock_http, mock_auth)
+        result = await service.get_week_sales(size=2)
+
+        assert [c.id for c in result] == [1353975, 1476819]
+        assert result[1].on_sale is True
+        assert "week-sales" in mock_http.get.call_args_list[0][0][0]
+        assert "/api/v1/products/card?" in mock_http.get.call_args_list[1][0][0]
+
+    async def test_get_week_sales_empty_when_no_products(self, mock_http, mock_auth):
+        """get_week_sales returns [] (no card request) when there are no deals."""
+        resp = MagicMock()
+        resp.json.return_value = {"products": []}
+        resp.raise_for_status = MagicMock()
+        mock_http.get.return_value = resp
+
+        service = ProductService(mock_http, mock_auth)
+        assert await service.get_week_sales() == []
+        assert mock_http.get.call_count == 1  # only the week-sales call
+
     async def test_get_categories_returns_hierarchy(self, mock_http, mock_auth):
         """Test get_categories returns the inner category list."""
         mock_response = MagicMock()
