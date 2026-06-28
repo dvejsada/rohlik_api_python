@@ -18,6 +18,7 @@ online grocery service — search products, manage your cart, browse recipes
 ## Table of contents
 
 - [Features](#features)
+- [Related projects](#related-projects)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick start](#quick-start)
@@ -40,6 +41,18 @@ online grocery service — search products, manage your cart, browse recipes
 - 🔄 Works as an async context manager
 - 🍳 Recipe search and ingredient shopping (Rohlík Chef)
 - 📦 Product details, composition/nutrition, prices, and AI summaries
+
+## Related projects
+
+Built on top of this library — handy if you'd rather not write Python:
+
+- 🤖 **[rohlik-mcp](https://github.com/dvejsada/rohlik-mcp)** — a
+  [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes
+  Rohlik.cz to AI assistants like Claude. Search products, manage your cart, plan
+  meals from recipes, and check orders and deliveries in plain language.
+- 🏠 **[HA-RohlikCZ](https://github.com/dvejsada/HA-RohlikCZ)** — a
+  [Home Assistant](https://www.home-assistant.io/) integration that brings your
+  Rohlik.cz cart, orders and deliveries into your smart home.
 
 ## Requirements
 
