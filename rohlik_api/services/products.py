@@ -7,7 +7,14 @@ from typing import Any
 
 from ..endpoints import Endpoints
 from ..http_client import HTTP_ERRORS
-from ..models import AISummary, ProductComposition, ProductPrice, ProductSearchResult, SearchResults
+from ..models import (
+    AISummary,
+    ProductCard,
+    ProductComposition,
+    ProductPrice,
+    ProductSearchResult,
+    SearchResults,
+)
 from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
@@ -126,6 +133,75 @@ class ProductService(BaseService):
         except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching price for product %s: %s", product_id, err)
             return None
+
+    async def get_cards(
+        self, product_ids: list[int], category_type: str = "normal"
+    ) -> list[ProductCard] | None:
+        """Get basic product cards for several products in a single request.
+
+        Args:
+            product_ids: The product IDs to look up.
+            category_type: The ``categoryType`` query parameter (default "normal").
+
+        Returns:
+            A list of :class:`ProductCard` in the same order as ``product_ids``
+            (IDs the API did not return are skipped), an empty list if
+            ``product_ids`` is empty, or None if the request fails.
+        """
+        await self._ensure_logged_in()
+
+        if not product_ids:
+            return []
+
+        try:
+            url = Endpoints.product_cards(product_ids, category_type=category_type)
+            response = await self._http.get(url)
+            response.raise_for_status()
+            payload = response.json()
+        except HTTP_ERRORS as err:
+            _LOGGER.warning("Error fetching product cards: %s", err)
+            return None
+
+        if not isinstance(payload, list):
+            return None
+
+        by_id = {card.id: card for card in (ProductCard.from_api(item) for item in payload)}
+        return [by_id[pid] for pid in product_ids if pid in by_id]
+
+    async def get_week_sales(
+        self, page: int = 0, size: int = 30, sort: str = "recommended"
+    ) -> list[ProductCard] | None:
+        """Get this week's deals ("Akce týdne"), enriched with basic product data.
+
+        The deals endpoint returns only product IDs; these are enriched via the
+        bulk product-card endpoint in a single follow-up request.
+
+        Args:
+            page: Result page (default 0).
+            size: Maximum number of products (default 30).
+            sort: Sort order (default "recommended").
+
+        Returns:
+            A list of :class:`ProductCard` for the products on sale, an empty
+            list if there are none, or None if the request fails.
+        """
+        await self._ensure_logged_in()
+
+        try:
+            url = Endpoints.week_sales(page=page, size=size, sort=sort)
+            response = await self._http.get(url)
+            response.raise_for_status()
+            payload = response.json()
+        except HTTP_ERRORS as err:
+            _LOGGER.warning("Error fetching week sales: %s", err)
+            return None
+
+        data = payload.get("data", payload) if isinstance(payload, dict) else {}
+        product_ids = data.get("products") if isinstance(data, dict) else None
+        if not isinstance(product_ids, list) or not product_ids:
+            return []
+
+        return await self.get_cards(product_ids)
 
     async def get_detail(self, product_id: int) -> dict[str, Any] | None:
         """Get the full product detail (brand, attributes, etc.).
