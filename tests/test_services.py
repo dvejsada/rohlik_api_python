@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rohlik_api.auth import AuthManager
+from rohlik_api.endpoints import Endpoints
 from rohlik_api.http_client import HttpClient
 from rohlik_api.services import (
     AccountService,
@@ -456,11 +457,77 @@ class TestDeliveryService:
         """Test get_next_slots returns None when IDs are missing."""
         mock_auth.user_id = None
         mock_auth.address_id = None
+        # The address list also yields nothing, so no address can be resolved.
+        empty = MagicMock()
+        empty.json.return_value = {"status": 200, "data": []}
+        empty.raise_for_status = MagicMock()
+        mock_http.get.return_value = empty
 
         service = DeliveryService(mock_http, mock_auth)
         result = await service.get_next_slots()
 
         assert result is None
+
+    # Real (anonymised) payload shape from /delivery-address/list.
+    _ADDRESS_LIST = {
+        "status": 200,
+        "messages": [],
+        "data": [
+            {"address": {"id": 11723996, "isDeliveredTo": True}, "store": {"storeId": 8799}},
+            {"address": {"id": 5436937, "isDeliveredTo": True}, "store": {"storeId": 8799}},
+        ],
+    }
+
+    async def test_get_addresses_returns_envelope(self, mock_http, mock_auth):
+        """get_addresses returns the delivery-address list envelope."""
+        resp = MagicMock()
+        resp.json.return_value = self._ADDRESS_LIST
+        resp.raise_for_status = MagicMock()
+        mock_http.get.return_value = resp
+
+        service = DeliveryService(mock_http, mock_auth)
+        result = await service.get_addresses()
+
+        assert result["data"][0]["address"]["id"] == 11723996
+        assert mock_http.get.call_args[0][0] == Endpoints.DELIVERY_ADDRESS_LIST
+
+    async def test_get_active_address_id_prefers_delivered_to(self, mock_http, mock_auth):
+        """get_active_address_id returns the first isDeliveredTo address id."""
+        resp = MagicMock()
+        resp.json.return_value = {
+            "data": [
+                {"address": {"id": 1, "isDeliveredTo": False}},
+                {"address": {"id": 22, "isDeliveredTo": True}},
+            ]
+        }
+        resp.raise_for_status = MagicMock()
+        mock_http.get.return_value = resp
+
+        service = DeliveryService(mock_http, mock_auth)
+        assert await service.get_active_address_id() == 22
+
+    async def test_get_next_slots_resolves_address_from_list(self, mock_http, mock_auth):
+        """When login lacks an address, get_next_slots resolves it from the list."""
+        mock_auth.address_id = None  # login did not provide one
+
+        address_resp = MagicMock()
+        address_resp.json.return_value = self._ADDRESS_LIST
+        address_resp.raise_for_status = MagicMock()
+        slots_resp = MagicMock()
+        slots_resp.json.return_value = {"slots": ["x"]}
+        slots_resp.raise_for_status = MagicMock()
+        # First GET resolves the address list, second GET fetches the slots.
+        mock_http.get.side_effect = [address_resp, slots_resp]
+
+        service = DeliveryService(mock_http, mock_auth)
+        result = await service.get_next_slots()
+
+        assert result == {"slots": ["x"]}
+        slots_url = mock_http.get.call_args_list[1][0][0]
+        assert "userId=12345" in slots_url
+        assert "addressId=11723996" in slots_url
+        # the resolved id is cached back on the auth manager
+        assert mock_auth.address_id == 11723996
 
 
 class TestAccountService:

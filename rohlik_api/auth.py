@@ -57,6 +57,16 @@ class AuthManager:
         """Get the current address ID."""
         return self._address_id
 
+    @address_id.setter
+    def address_id(self, value: int | None) -> None:
+        """Set the address ID.
+
+        Used to cache an address resolved from the delivery-address list when
+        the login response did not include one (the API does not always
+        provide an address on login).
+        """
+        self._address_id = value
+
     async def login(self) -> dict[str, Any]:
         """Authenticate with the Rohlik.cz service.
 

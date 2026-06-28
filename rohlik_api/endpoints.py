@@ -24,6 +24,7 @@ class Endpoints:
     DELIVERY = "/services/frontend-service/first-delivery?reasonableDeliveryTime=true"
     TIMESLOT_RESERVATION = "/services/frontend-service/v1/timeslot-reservation"
     DELIVERY_ANNOUNCEMENTS = "/services/frontend-service/announcements/delivery"
+    DELIVERY_ADDRESS_LIST = "/services/frontend-service/delivery-address/list"
 
     # Orders
     NEXT_ORDER = "/api/v3/orders/upcoming"
