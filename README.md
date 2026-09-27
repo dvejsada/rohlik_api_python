@@ -41,6 +41,7 @@ online grocery service — search products, manage your cart, browse recipes
 - 🔄 Works as an async context manager
 - 🍳 Recipe search and ingredient shopping (Rohlík Chef)
 - 📦 Product details, composition/nutrition, prices, and AI summaries
+- 🌍 Works with every Rohlík Group shop: Rohlík.cz, Knuspr.de, Gurkerl.at, Kifli.hu and Sezamo.ro
 
 ## Related projects
 
@@ -155,7 +156,10 @@ Functionality is grouped into services, accessed as properties on the client:
 ```python
 # Get cart contents
 cart = await client.cart.get_content()
-# -> Cart(total_price=199.90, total_items=3, can_make_order=True, products=[CartItem, ...])
+# -> Cart(total_price=199.90, total_items=3, can_make_order=True, products=[CartItem, ...],
+#         minimum_order_price=..., currency="CZK")
+# can_make_order also requires checkout details (e.g. a delivery slot); to check
+# the minimum order value, compare total_price with minimum_order_price.
 
 # Add items to cart
 added = await client.cart.add_items([
@@ -268,6 +272,32 @@ except APIRequestFailedError as err:
   continue gracefully.
 
 ## Advanced usage
+
+### Other shops
+
+Rohlík Group runs the same API under several brands. `SITES` holds the known
+shops (base URL, currency, timezone), keyed by country code:
+
+| Code | Shop | Currency |
+|------|------|----------|
+| `cz` | Rohlík.cz (default) | CZK |
+| `de` | Knuspr.de | EUR |
+| `at` | Gurkerl.at | EUR |
+| `hu` | Kifli.hu | HUF |
+| `ro` | Sezamo.ro | RON |
+
+```python
+from rohlik_api import SITES, RohlikAPI
+
+site = SITES["de"]
+async with RohlikAPI("email@example.com", "password", base_url=site.base_url) as client:
+    cart = await client.cart.get_content()
+    print(cart.total_price, cart.currency or site.currency)  # e.g. 11.99 EUR
+```
+
+`Cart.currency` comes from the cart's items, so it is `None` for an empty cart (or if no item reports one);
+fall back to `site.currency` then. Delivery announcements and other texts come
+back in the shop's language.
 
 ### Configuration
 
