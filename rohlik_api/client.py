@@ -165,7 +165,7 @@ class RohlikAPI:
     # -------------------------------------------------------------------------
 
     async def login(self) -> dict[str, Any]:
-        """Authenticate with the Rohlik.cz service.
+        """Authenticate with the shop.
 
         Returns:
             The JSON response containing authentication data.
@@ -173,11 +173,12 @@ class RohlikAPI:
         Raises:
             InvalidCredentialsError: If the credentials are invalid.
             APIRequestFailedError: If the request fails.
+            RohlikAPIError: If the shop answers with any other non-success status.
         """
         return await self._auth.login()
 
     async def logout(self) -> None:
-        """Log out from the Rohlik.cz service.
+        """Log out from the shop.
 
         Raises:
             RohlikAPIError: If logout fails.
@@ -219,7 +220,7 @@ class RohlikAPI:
     # -------------------------------------------------------------------------
 
     async def get_data(self) -> dict[str, Any]:
-        """Retrieve account data from Rohlik.cz in a single aggregated call.
+        """Retrieve account data from the shop in a single aggregated call.
 
         Returns:
             A dictionary containing delivery info, orders, cart contents,

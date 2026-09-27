@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rohlik-api"
 dynamic = ["version"]
-description = "Async Python client for the Rohlik.cz API"
+description = "Async Python client for the Rohlik.cz API (also Knuspr.de, Gurkerl.at, Kifli.hu and Sezamo.ro)"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [
     {name = "Daniel Vejsada", email = "dan.vejsada@gmail.com"}
 ]
-keywords = ["rohlik", "api", "client", "grocery", "async"]
+keywords = ["rohlik", "knuspr", "gurkerl", "kifli", "sezamo", "api", "client", "grocery", "async"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
