@@ -1,135 +1,55 @@
 # Publishing to PyPI
 
-This document provides instructions for publishing the `rohlik-api` package to PyPI.
+Releases are published to [PyPI](https://pypi.org/project/rohlik-api/) by the
+`Publish to PyPI` workflow (`.github/workflows/publish.yml`). It runs when a
+GitHub Release is **published**, builds the sdist and wheel, checks them with
+`twine`, and uploads them using PyPI Trusted Publishing (OIDC), so no API token
+is stored anywhere.
 
-## Prerequisites
+## Releasing a new version
 
-1. Create accounts on:
-   - PyPI: https://pypi.org/account/register/
-   - TestPyPI (for testing): https://test.pypi.org/account/register/
+1. **Bump the version** in `rohlik_api/__init__.py` (`__version__`). It is the
+   single source of truth; `pyproject.toml` reads it dynamically. Follow
+   semantic versioning: patch (`0.3.1`) for fixes, minor (`0.4.0`) for new
+   features, and major for breaking changes. Merge the bump to `main`.
+2. **Make sure CI is green on `main`** (ruff, black, mypy, pytest).
+3. **Create a GitHub Release** (Releases → Draft a new release):
+   - Tag: `v<version>`, e.g. `v0.3.0`, created from `main`. It must match
+     `__version__`; PyPI rejects a version that was already uploaded.
+   - Title: `v<version> - <short headline>`.
+   - Notes: `## Added` / `## Changed` / `## Fixed` sections as needed, plus a
+     `## Compatibility` note on breaking changes and the minimum Python version.
+4. **Publish the release.** The workflow uploads the package. Watch it under
+   Actions → Publish to PyPI; the `publish` job runs in the `pypi` environment.
 
-2. Install required tools:
-   ```bash
-   pip install build twine
-   ```
-
-## Building the Package
-
-Build the package distributions:
+## Verifying a release
 
 ```bash
-python -m build
+pip install --upgrade rohlik-api
+python -c "import rohlik_api; print(rohlik_api.__version__)"
 ```
 
-This creates:
-- `dist/rohlik_api-0.1.0-py3-none-any.whl` (wheel distribution)
-- `dist/rohlik_api-0.1.0.tar.gz` (source distribution)
+## Building locally
 
-## Testing on TestPyPI (Recommended)
+To check the distribution without publishing:
 
-Test your package on TestPyPI first:
+```bash
+pip install build twine
+python -m build
+python -m twine check dist/*
+```
+
+This creates `dist/rohlik_api-<version>-py3-none-any.whl` and
+`dist/rohlik_api-<version>.tar.gz`. To try an upload without touching the real
+index, use [TestPyPI](https://test.pypi.org/):
 
 ```bash
 python -m twine upload --repository testpypi dist/*
-```
-
-Then test installation:
-
-```bash
 pip install --index-url https://test.pypi.org/simple/ rohlik-api
 ```
 
-## Publishing to PyPI
+## One-time setup (already done)
 
-Once you've tested on TestPyPI, publish to the real PyPI:
-
-```bash
-python -m twine upload dist/*
-```
-
-You'll be prompted for your PyPI username and password.
-
-## Using API Tokens (Recommended)
-
-Instead of username/password, use API tokens:
-
-1. Generate an API token on PyPI:
-   - Go to Account Settings → API tokens
-   - Create a new token
-
-2. Configure in `~/.pypirc`:
-   ```ini
-   [pypi]
-   username = __token__
-   password = pypi-AgEIcHlwaS5vcmc...your-token-here...
-   
-   [testpypi]
-   username = __token__
-   password = pypi-AgENdGVzdC5weXBpLm9yZw...your-token-here...
-   ```
-
-## Automated Publishing with GitHub Actions
-
-You can automate publishing using GitHub Actions. Create `.github/workflows/publish.yml`:
-
-```yaml
-name: Publish to PyPI
-
-on:
-  release:
-    types: [published]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write  # Required for trusted publishing
-    steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build
-    - name: Build package
-      run: python -m build
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-```
-
-Configure Trusted Publishing on PyPI:
-1. Go to your project on PyPI → Publishing
-2. Add a new "pending publisher" with your GitHub repo details
-3. Create an environment named `pypi` in your GitHub repo settings
-
-## Version Updates
-
-When releasing a new version:
-
-1. Bump `__version__` in `rohlik_api/__init__.py` (this is the single source of
-   truth — `pyproject.toml` reads it dynamically).
-2. Create a git tag:
-   ```bash
-   git tag v0.1.1
-   git push origin v0.1.1
-   ```
-3. Build and publish the new version (or let the GitHub Actions release workflow
-   do it).
-
-## Verification
-
-After publishing, verify the package:
-
-1. Check it appears on PyPI: https://pypi.org/project/rohlik-api/
-2. Install in a fresh environment:
-   ```bash
-   pip install rohlik-api
-   ```
-3. Test the installation:
-   ```bash
-   python -c "from rohlik_api import RohlikAPI; print('Success!')"
-   ```
+- PyPI project → Publishing: a trusted publisher for this repository, the
+  `publish.yml` workflow and the `pypi` environment.
+- GitHub repository → Settings → Environments: an environment named `pypi`.

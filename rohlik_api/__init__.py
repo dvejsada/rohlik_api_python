@@ -1,6 +1,8 @@
 """Rohlik.cz API Python Client.
 
-An async Python client for the Rohlik.cz API, built on aiohttp.
+An async Python client for the Rohlik.cz API, built on aiohttp. The same API
+serves the other Rohlík Group shops (Knuspr.de, Gurkerl.at, Kifli.hu,
+Sezamo.ro); see :data:`SITES`.
 """
 
 from .auth import AuthManager

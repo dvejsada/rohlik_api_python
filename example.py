@@ -1,26 +1,28 @@
 """Example usage of the Rohlik API client.
 
-Replace USERNAME and PASSWORD with your real Rohlik.cz credentials and run:
+Replace USERNAME and PASSWORD with your real credentials and run:
 
     python example.py
 
-The network calls are commented out so the file runs without credentials.
-Uncomment the blocks you want to exercise once you have set your credentials.
+It logs in and runs a product search, a cart fetch and a recipe search; the
+other calls are commented out. Uncomment the ones you want to try. For a shop
+other than Rohlík.cz, set SITE (see rohlik_api.SITES).
 """
 
 import asyncio
 
-from rohlik_api import APIRequestFailedError, InvalidCredentialsError, RohlikAPI
+from rohlik_api import SITES, APIRequestFailedError, InvalidCredentialsError, RohlikAPI
 
 USERNAME = "your_email@example.com"
 PASSWORD = "your_password"
+SITE = SITES["cz"]  # or "de" (Knuspr.de), "at", "hu", "ro"
 
 
 async def main() -> None:
     """Demonstrate the service-based API of the Rohlik client."""
     # The recommended pattern: an async context manager with auto-login.
     # On entry it logs in; on exit it logs out and releases resources.
-    async with RohlikAPI(username=USERNAME, password=PASSWORD) as client:
+    async with RohlikAPI(username=USERNAME, password=PASSWORD, base_url=SITE.base_url) as client:
         print(f"Logged in: {client.is_logged_in}")
         print(f"User ID: {client.user_id}, Address ID: {client.address_id}")
 
@@ -33,10 +35,15 @@ async def main() -> None:
         # composition = await client.products.get_composition(product_id=1425155)
         # price = await client.products.get_price(product_id=1425155)
         # summary = await client.products.get_ai_summary(product_id=1384964)
+        # cards = await client.products.get_cards([1425155, 1384964])
+        # deals = await client.products.get_week_sales(size=10)
 
         # --- Cart ----------------------------------------------------------
         cart = await client.cart.get_content()
-        print(f"Cart total: {cart.total_price} ({cart.total_items} items)")
+        print(
+            f"Cart total: {cart.total_price} {cart.currency or SITE.currency} "
+            f"({cart.total_items} items, minimum order {cart.minimum_order_price})"
+        )
 
         # await client.cart.add_items([{"product_id": 1234567, "quantity": 2}])
         # if cart.products:
@@ -45,6 +52,7 @@ async def main() -> None:
         # --- Delivery & orders --------------------------------------------
         # delivery = await client.delivery.get_info()
         # slots = await client.delivery.get_next_slots()
+        # addresses = await client.delivery.get_addresses()
         # next_order = await client.orders.get_next()
         # history = await client.orders.get_delivered(limit=10)
 
@@ -66,7 +74,9 @@ async def main() -> None:
 
 async def manual_session() -> None:
     """Demonstrate manual session management without the context manager."""
-    client = RohlikAPI(username=USERNAME, password=PASSWORD, auto_login=False)
+    client = RohlikAPI(
+        username=USERNAME, password=PASSWORD, base_url=SITE.base_url, auto_login=False
+    )
     try:
         await client.login()
         cart = await client.cart.get_content()

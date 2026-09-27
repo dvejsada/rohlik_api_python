@@ -1,8 +1,10 @@
 # 🛒 Rohlik API Python Client
 
 An async, fully typed Python client for the [Rohlik.cz](https://www.rohlik.cz)
-online grocery service — search products, manage your cart, browse recipes
-(Rohlík Chef), and read your orders and deliveries, all from Python.
+online grocery service and its sister shops [Knuspr.de](https://www.knuspr.de),
+[Gurkerl.at](https://www.gurkerl.at), [Kifli.hu](https://www.kifli.hu) and
+[Sezamo.ro](https://www.sezamo.ro) — search products, manage your cart, browse
+recipes (Rohlík Chef), and read your orders and deliveries, all from Python.
 
 > ## ⚠️ Unofficial — personal use only
 >
@@ -42,6 +44,7 @@ online grocery service — search products, manage your cart, browse recipes
 - 🍳 Recipe search and ingredient shopping (Rohlík Chef)
 - 📦 Product details, composition/nutrition, prices, and AI summaries
 - 🌍 Works with every Rohlík Group shop: Rohlík.cz, Knuspr.de, Gurkerl.at, Kifli.hu and Sezamo.ro
+  ([other shops](#other-shops))
 
 ## Related projects
 
@@ -95,7 +98,7 @@ connection on exit.
 
 ## Credentials & security
 
-The client authenticates with your normal Rohlik.cz **email and password**.
+The client authenticates with your normal shop account **email and password**.
 
 - **Never hard-code credentials** in source you commit. Prefer environment
   variables or a secrets manager:
@@ -110,8 +113,9 @@ The client authenticates with your normal Rohlik.cz **email and password**.
   )
   ```
 
-- Credentials are only ever sent to Rohlik.cz over HTTPS. This library does not
-  store or transmit them anywhere else.
+- Credentials are only ever sent over HTTPS to the shop you target (Rohlik.cz
+  unless you pass another `base_url`). This library does not store or transmit
+  them anywhere else.
 - Use a dedicated account if you're uncomfortable automating your primary one.
 
 ## Typed models
@@ -194,6 +198,15 @@ detail = await client.products.get_detail(product_id=1425155)
 
 # Category hierarchy -> list[dict] | None (None if discontinued / 404)
 categories = await client.products.get_categories(product_id=1425155)
+
+# Basic data for many products in one request -> list[ProductCard] | None
+# (same order as the IDs; IDs the API did not return are skipped)
+cards = await client.products.get_cards([1425155, 1384964])
+
+# This week's deals ("Akce týdne") as ProductCards -> list[ProductCard] | None
+deals = await client.products.get_week_sales(size=30)
+for card in deals or []:
+    print(card.name, card.price, card.original_price, card.on_sale)
 ```
 
 ### Orders service (`client.orders`)
@@ -209,11 +222,17 @@ detail = await client.orders.get_detail(order_id=12345678)        # full order i
 ### Delivery service (`client.delivery`)
 
 ```python
-delivery = await client.delivery.get_info()
-timeslot = await client.delivery.get_timeslot_reservation()
-slots = await client.delivery.get_next_slots()
-announcements = await client.delivery.get_announcements()
+delivery = await client.delivery.get_info()                    # first available delivery
+timeslot = await client.delivery.get_timeslot_reservation()    # reserved slot, if any
+slots = await client.delivery.get_next_slots()                 # upcoming slots for your address
+announcements = await client.delivery.get_announcements()      # e.g. courier ETA messages
+addresses = await client.delivery.get_addresses()              # saved delivery addresses
+address_id = await client.delivery.get_active_address_id()     # address used for slots
 ```
+
+`get_next_slots()` needs a delivery address. The login response does not always
+include one, so the client falls back to your saved addresses (preferring the one
+you are currently delivered to) and caches the result.
 
 ### Account service (`client.account`)
 
@@ -267,9 +286,15 @@ except APIRequestFailedError as err:
 
 - **Critical / mutating operations** (login, `cart.get_content`, `cart.delete_item`,
   `account.get_shopping_list`) **raise** `APIRequestFailedError` on failure.
+  Login raises `InvalidCredentialsError` for a wrong email or password, and
+  `RohlikAPIError` for any other status the shop reports.
 - **Read / optional fetches** (most `orders`, `delivery`, `account`, `products`,
   and `recipes` getters) **return `None`** on failure, so an aggregate fetch can
   continue gracefully.
+- **Batch operations** do not fail as a whole: `cart.add_items` returns only the
+  IDs that were added (failures are logged), and `orders.get_all_delivered`
+  returns the orders gathered so far if a page fails.
+- `account.get_shopping_list` raises `ValueError` if called without an ID.
 
 ## Advanced usage
 
@@ -295,9 +320,9 @@ async with RohlikAPI("email@example.com", "password", base_url=site.base_url) as
     print(cart.total_price, cart.currency or site.currency)  # e.g. 11.99 EUR
 ```
 
-`Cart.currency` comes from the cart's items, so it is `None` for an empty cart (or if no item reports one);
-fall back to `site.currency` then. Delivery announcements and other texts come
-back in the shop's language.
+`Cart.currency` comes from the cart's items, so it is `None` for an empty cart
+(or if no item reports one); fall back to `site.currency` then. Delivery
+announcements and other texts come back in the shop's language.
 
 ### Configuration
 
@@ -305,7 +330,7 @@ back in the shop's language.
 client = RohlikAPI(
     username="your_email@example.com",
     password="your_password",
-    base_url="https://www.rohlik.cz",  # optional
+    base_url="https://www.rohlik.cz",  # optional; e.g. SITES["de"].base_url
     timeout=30.0,                       # optional
     headers={"Custom-Header": "Value"}, # optional
     auto_login=True,                    # optional, default True
@@ -325,6 +350,7 @@ async def main():
     )
     try:
         await client.login()
+        print(client.is_logged_in, client.user_id, client.address_id)
         cart = await client.cart.get_content()
         await client.logout()
     finally:
