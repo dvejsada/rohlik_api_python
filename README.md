@@ -295,7 +295,7 @@ async with RohlikAPI("email@example.com", "password", base_url=site.base_url) as
     print(cart.total_price, cart.currency or site.currency)  # e.g. 11.99 EUR
 ```
 
-`Cart.currency` comes from the cart's items, so it is `None` for an empty cart;
+`Cart.currency` comes from the cart's items, so it is `None` for an empty cart (or if no item reports one);
 fall back to `site.currency` then. Delivery announcements and other texts come
 back in the shop's language.
 

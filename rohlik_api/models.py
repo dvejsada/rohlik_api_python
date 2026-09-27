@@ -85,8 +85,9 @@ class Cart:
             order (``minimalOrderPrice``), in :attr:`currency`, or ``None`` if
             the API does not report one. Anonymous carts report ``0``.
         currency: ISO 4217 currency code of the cart's prices, taken from its
-            items, or ``None`` for an empty cart (the cart payload itself has
-            no currency; see :data:`~rohlik_api.SITES` for each shop's).
+            items, or ``None`` when the cart is empty or no item reports one
+            (the cart payload itself has no currency; see
+            :data:`~rohlik_api.SITES` for each shop's).
     """
 
     total_price: float
