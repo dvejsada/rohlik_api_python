@@ -104,6 +104,48 @@ class TestCartService:
         assert result.can_make_order is True
         assert len(result.products) == 1
         assert result.products[0].name == "Test Product"
+        # Neither field is in this payload.
+        assert result.minimum_order_price is None
+        assert result.currency is None
+
+    async def test_get_content_currency_and_minimum_order(self, mock_http, mock_auth):
+        """The cart currency comes from its items; the minimum from minimalOrderPrice."""
+        mock_response = MagicMock()
+        # Shape of a real Knuspr.de /v2/cart response (trimmed). The minimum is
+        # made up: the anonymous cart this was captured from reported 0.
+        mock_response.json.return_value = {
+            "status": 200,
+            "data": {
+                "cartId": 66772968,
+                "totalPrice": 11.99,
+                "minimalStandardOrderPrice": 0,
+                "minimalDeliveryPointOrderPrice": 0,
+                "minimalOrderPrice": 39.0,
+                "submitConditionPassed": False,
+                "items": {
+                    "91348": {
+                        "productId": 91348,
+                        "orderFieldId": 270627531,
+                        "productName": "MIIL Haltbare Milch 1,5% Laktosefrei 12 Pack",
+                        "quantity": 1,
+                        "price": 11.99,
+                        "currency": "EUR",
+                        "primaryCategoryName": "Kühlregal",
+                        "brand": "Miil",
+                    }
+                },
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_http.get.return_value = mock_response
+
+        service = CartService(mock_http, mock_auth)
+        result = await service.get_content()
+
+        assert result.minimum_order_price == 39.0
+        assert result.currency == "EUR"
+        assert result.products[0].currency == "EUR"
+        assert result.can_make_order is False
 
     async def test_add_items_sends_correct_payload(self, mock_http, mock_auth):
         """Test add_items sends correct payload."""

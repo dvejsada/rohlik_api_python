@@ -25,16 +25,20 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class RohlikAPI:
-    """Async client for interacting with the Rohlik.cz API.
+    """Async client for interacting with the Rohlík Group API.
+
+    Talks to Rohlík.cz by default; pass another shop's ``base_url`` (see
+    :data:`~rohlik_api.SITES`) for Knuspr.de, Gurkerl.at, Kifli.hu or Sezamo.ro.
 
     The client is built on aiohttp and exposes a service-based API for all
     operations. When used as an async context manager with ``auto_login=True``
     (the default), it logs in on entry and logs out on exit.
 
     Args:
-        username: Email address used for Rohlik.cz login (required).
-        password: Password for the Rohlik.cz account (required).
-        base_url: Base URL for the Rohlik.cz API. Defaults to https://www.rohlik.cz
+        username: Email address used for the shop login (required).
+        password: Password for the shop account (required).
+        base_url: Base URL of the shop's API, e.g. ``SITES["de"].base_url``.
+            Defaults to https://www.rohlik.cz
         timeout: Request timeout in seconds. Defaults to 30.0.
         headers: Optional custom headers to include in all requests.
         auto_login: If True (default), log in automatically when used as a

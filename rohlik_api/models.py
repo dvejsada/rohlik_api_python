@@ -8,8 +8,9 @@ Home Assistant integration and the MCP server).
 
 Monetary amounts come in two shapes: ``price`` fields typed as ``str`` are
 pre-formatted for display (for example ``"29.90 Kč"``), while numeric ``price``
-fields are raw amounts paired with a separate ``currency``. Czech crowns (CZK,
-"Kč") are the usual currency.
+fields are raw amounts in the shop's currency, paired with a separate ISO 4217
+``currency`` code where the API provides one (``"CZK"`` on Rohlík.cz, ``"EUR"``
+on Knuspr.de, see :data:`~rohlik_api.SITES`).
 """
 
 from __future__ import annotations
@@ -35,9 +36,11 @@ class CartItem:
             line from the cart.
         name: Product name.
         quantity: Number of units of this product in the cart.
-        price: Line price for this product, in the account currency (CZK).
+        price: Line price for this product, in :attr:`currency`.
         category_name: Primary category name of the product.
         brand: Brand name, or an empty string if unknown.
+        currency: ISO 4217 currency code of :attr:`price`, e.g. ``"CZK"``, or an
+            empty string if the API omits it.
     """
 
     id: str
@@ -47,6 +50,7 @@ class CartItem:
     price: float
     category_name: str = ""
     brand: str = ""
+    currency: str = ""
 
     @classmethod
     def from_api(cls, item_id: str, data: dict[str, Any]) -> CartItem:
@@ -59,6 +63,7 @@ class CartItem:
             price=data.get("price", 0),
             category_name=data.get("primaryCategoryName", ""),
             brand=data.get("brand", ""),
+            currency=data.get("currency", ""),
         )
 
 
@@ -67,29 +72,43 @@ class Cart:
     """The current shopping cart.
 
     Attributes:
-        total_price: Total price of the cart, in the account currency (CZK).
+        total_price: Total price of the cart, in :attr:`currency`.
         total_items: Number of distinct products in the cart (line count, not
             the summed quantity).
-        can_make_order: Whether the cart currently satisfies the conditions to
-            place an order (e.g. the minimum order value is met).
+        can_make_order: Whether the cart passes all of the shop's submit
+            conditions (``submitConditionPassed``). These include checkout
+            details such as a chosen delivery slot, so this is not a
+            minimum-order indicator; compare against
+            :attr:`minimum_order_price` for that.
         products: The cart's line items.
+        minimum_order_price: Smallest cart total the shop accepts for an
+            order (``minimalOrderPrice``), in :attr:`currency`, or ``None`` if
+            the API does not report one. Anonymous carts report ``0``.
+        currency: ISO 4217 currency code of the cart's prices, taken from its
+            items, or ``None`` for an empty cart (the cart payload itself has
+            no currency; see :data:`~rohlik_api.SITES` for each shop's).
     """
 
     total_price: float
     total_items: int
     can_make_order: bool
     products: list[CartItem] = field(default_factory=list)
+    minimum_order_price: float | None = None
+    currency: str | None = None
 
     @classmethod
     def from_api(cls, payload: dict[str, Any]) -> Cart:
         """Build a :class:`Cart` from a ``/v2/cart`` response."""
         data = payload.get("data", {})
         items: dict[str, Any] = data.get("items", {})
+        products = [CartItem.from_api(pid, pdata) for pid, pdata in items.items()]
         return cls(
             total_price=data.get("totalPrice", 0),
             total_items=len(items),
             can_make_order=data.get("submitConditionPassed", False),
-            products=[CartItem.from_api(pid, pdata) for pid, pdata in items.items()],
+            products=products,
+            minimum_order_price=data.get("minimalOrderPrice"),
+            currency=next((p.currency for p in products if p.currency), None),
         )
 
 

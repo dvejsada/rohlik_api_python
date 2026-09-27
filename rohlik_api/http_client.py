@@ -61,7 +61,7 @@ class HttpClient:
     session is never closed by this client, leaving its lifecycle to the owner.
 
     Args:
-        base_url: Base URL for the Rohlik.cz API.
+        base_url: Base URL of the shop's API (see :data:`~rohlik_api.SITES`).
         timeout: Request timeout in seconds.
         headers: Optional custom headers added to every request.
         session: Optional externally managed aiohttp session to reuse.
