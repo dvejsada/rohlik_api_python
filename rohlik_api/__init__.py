@@ -17,6 +17,7 @@ from .models import (
     Cart,
     CartItem,
     CourierPosition,
+    DeliveryDestination,
     DeliveryEtaSource,
     DeliveryProgress,
     DeliveryTracking,
@@ -44,7 +45,7 @@ from .models import (
 )
 from .sites import SITES, Site
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = [
     # Main client (facade)
     "RohlikAPI",
@@ -82,6 +83,7 @@ __all__ = [
     "DeliveryTracking",
     "DeliveryProgress",
     "CourierPosition",
+    "DeliveryDestination",
     "NextDelivery",
     "TrackingStatus",
     "DeliveryEtaSource",

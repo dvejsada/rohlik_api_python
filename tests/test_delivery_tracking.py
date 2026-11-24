@@ -17,6 +17,7 @@ from rohlik_api.errors import APIRequestFailedError, InvalidCredentialsError
 from rohlik_api.http_client import HttpClient
 from rohlik_api.models import (
     CourierPosition,
+    DeliveryDestination,
     DeliveryTracking,
     NextDelivery,
     TrackingStatus,
@@ -180,8 +181,7 @@ class TestDeliveryTrackingParsing:
         assert "+420000000000" not in dumped
         assert "phoneNumber" not in dumped
         assert "encodedPolyline" not in dumped
-        # The destination (50.0, 14.0) is not kept; the courier position (50.001) is.
-        assert "50.0," not in dumped and "14.0," not in dumped
+        assert "photoUrl" not in dumped
 
     def test_repr_hides_courier_name_and_position(self):
         text = repr(tracking("on_the_way.json"))
@@ -496,6 +496,49 @@ class TestStrictParsing:
 
     def test_upcoming_slot_till(self):
         assert upcoming_order().slot_till == datetime(2026, 11, 24, 12, 15, tzinfo=UTC)
+
+    def test_destination_is_parsed(self):
+        t = tracking("before_queue.json")
+        assert t.destination == DeliveryDestination(latitude=50.0, longitude=14.0)
+        assert t.courier_position is None
+        assert t.courier_distance is None
+
+    @pytest.mark.parametrize(
+        "destination",
+        [{"latitude": 50.0}, {"latitude": "50", "longitude": 14.0}, "50,14", None],
+    )
+    def test_incomplete_destination_is_dropped(self, destination):
+        data = load("on_the_way.json")
+        data["destination"] = destination
+        t = DeliveryTracking.from_api(data)
+        assert t.destination is None
+        assert t.courier_position is not None
+        assert t.courier_distance is None
+
+    def test_courier_distance_on_the_way(self):
+        t = tracking("on_the_way.json")
+        assert t.courier_position == t.progress.courier_position
+        # 0.001° of latitude ≈ 111.2 m, 0.001° of longitude at 50° N ≈ 71.5 m.
+        assert t.courier_distance == pytest.approx(132.2, abs=0.5)
+
+    def test_distance_to_known_city_pair(self):
+        prague = CourierPosition(latitude=50.0755, longitude=14.4378, recorded_at=None)
+        brno = DeliveryDestination(latitude=49.1951, longitude=16.6068)
+        assert prague.distance_to(brno) == pytest.approx(185_000, rel=0.01)
+
+    def test_distance_to_same_point_is_zero(self):
+        here = CourierPosition(latitude=50.0, longitude=14.0, recorded_at=None)
+        assert here.distance_to(DeliveryDestination(latitude=50.0, longitude=14.0)) == 0.0
+
+    def test_no_progress_means_no_courier_position(self):
+        t = tracking("before_queue.json")
+        assert t.progress is None
+        assert t.courier_position is None
+
+    def test_destination_repr_hides_coordinates(self):
+        t = tracking("on_the_way.json")
+        assert "50.0" not in repr(t.destination)
+        assert "50.0" not in repr(t) and "14.0" not in repr(t)
 
     def test_courier_position_repr_hides_coordinates(self):
         position = tracking("on_the_way.json").progress.courier_position

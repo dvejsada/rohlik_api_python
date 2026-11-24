@@ -792,6 +792,45 @@ DeliveryEtaSource = Literal["tracking", "slot"]
 """Where :attr:`NextDelivery.eta` came from."""
 
 
+#: Mean Earth radius in metres, for the haversine distance.
+_EARTH_RADIUS_M = 6_371_008.8
+
+
+def _distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in metres (haversine)."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = phi2 - phi1
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * _EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
+
+
+@dataclass(slots=True)
+class DeliveryDestination:
+    """Where the order is delivered (the response's ``destination``).
+
+    This is the customer's address as coordinates, so personal data: do not
+    log or expose it without redaction.
+
+    Attributes:
+        latitude: Latitude in degrees.
+        longitude: Longitude in degrees.
+    """
+
+    latitude: float = field(repr=False)
+    longitude: float = field(repr=False)
+
+    @classmethod
+    def from_api(cls, data: Any) -> DeliveryDestination | None:
+        """Build a destination from ``destination``, or None if incomplete."""
+        data = _as_dict(data)
+        latitude = _as_float(data.get("latitude"))
+        longitude = _as_float(data.get("longitude"))
+        if latitude is None or longitude is None:
+            return None
+        return cls(latitude=latitude, longitude=longitude)
+
+
 @dataclass(slots=True)
 class CourierPosition:
     """The courier's last reported location.
@@ -821,6 +860,15 @@ class CourierPosition:
             latitude=latitude,
             longitude=longitude,
             recorded_at=parse_datetime(data.get("recordedAt")),
+        )
+
+    def distance_to(self, destination: DeliveryDestination) -> float:
+        """Straight-line (great-circle) distance to ``destination`` in metres.
+
+        This is not the driving distance: the courier's route is longer.
+        """
+        return _distance_m(
+            self.latitude, self.longitude, destination.latitude, destination.longitude
         )
 
 
@@ -884,6 +932,8 @@ class DeliveryTracking:
         courier_name: The courier's display name (a first name in observed
             data), or None until the order is queued. Personal data, hidden
             from ``repr``.
+        destination: The delivery address as coordinates, or None if the
+            response has none. Personal data, hidden from ``repr``.
     """
 
     order_id: int | None
@@ -895,13 +945,14 @@ class DeliveryTracking:
     early_delivery_allowed_from: datetime | None
     progress: DeliveryProgress | None
     courier_name: str | None = field(default=None, repr=False)
+    destination: DeliveryDestination | None = field(default=None, repr=False)
 
     @classmethod
     def from_api(cls, data: Any) -> DeliveryTracking:
         """Build tracking from a delivery-tracking response.
 
-        The courier's phone number and photo, the delivery destination and the
-        route/movement polylines are deliberately not kept.
+        The courier's phone number and photo and the route/movement polylines
+        are deliberately not kept.
         """
         data = _as_dict(data)
         slot = _as_dict(data.get("deliverySlot"))
@@ -917,6 +968,7 @@ class DeliveryTracking:
             early_delivery_allowed_from=parse_datetime(early.get("allowedFrom")),
             progress=DeliveryProgress.from_api(data.get("progress")),
             courier_name=_as_str(courier.get("displayName")),
+            destination=DeliveryDestination.from_api(data.get("destination")),
         )
 
     @property
@@ -933,6 +985,27 @@ class DeliveryTracking:
     def stops_before(self) -> int | None:
         """Stops the courier makes before this order, or None."""
         return self.progress.stops_before if self.progress else None
+
+    @property
+    def courier_position(self) -> CourierPosition | None:
+        """The courier's last reported location, or None.
+
+        The shop reports it from ``ON_THE_WAY`` through ``HANDING_OVER``. Check
+        ``progress.courier_location_stale`` before trusting it as current.
+        """
+        return self.progress.courier_position if self.progress else None
+
+    @property
+    def courier_distance(self) -> float | None:
+        """Straight-line distance from the courier to the destination in metres.
+
+        None unless both the courier position and the destination are known.
+        This is not the driving distance: the courier's route is longer.
+        """
+        position = self.courier_position
+        if position is None or self.destination is None:
+            return None
+        return position.distance_to(self.destination)
 
     @property
     def is_active(self) -> bool:
