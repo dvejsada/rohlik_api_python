@@ -1,6 +1,6 @@
 # Delivery tracking in rohlik-api — Implementation Plan (3.1–3.3)
 
-**Revision 2.** Incorporates the independent review (findings B1–B2, I1–I6 and the minors) of revision 1.
+**Revision 2**, amended by **Revision 3** at the end, which records the changes made during the two code reviews. Where they differ, Revision 3 wins.
 
 **Goal:** give every consumer of `rohlik-api` (Home Assistant, rohlik-mcp, scripts) a typed,
 locale-independent view of a delivery in progress: status, ETA, stops ahead and courier
@@ -360,3 +360,29 @@ the case the heuristic most depends on.
 | Expose `destination`? | No, not in 0.4.0 |
 | Nested `progress`? | Yes. Convenience properties on `DeliveryTracking` keep access flat |
 | Should 3.3 live in the library? | Yes, as a pure `resolve()` plus a thin wrapper, so HA can use the rule without a duplicate upcoming request |
+
+---
+
+## Revision 3 — changes made during code review
+
+These supersede the sections above where they differ.
+
+1. **`get_delivery_tracking(order_id, *, raise_on_error=False)`.**
+   - With `raise_on_error=True` a failed request raises `APIRequestFailedError` (chained to the cause),
+     so `None` means only "no tracking" (404).
+   - This replaces the advice to use `get_next_delivery()` to tell the two apart. `get_next_delivery()` uses it internally.
+2. **Malformed 200 responses fail.** A 200 response without an integer `orderId` (e.g. an error envelope) counts as a failure, not as empty tracking.
+3. **The ETA can move earlier.** The cap applies only while `IN_QUEUE` (unchanged), so the ETA **can move earlier** at
+   `IN_QUEUE → ON_THE_WAY` when early delivery was not requested. `eta_capped` turns False at that point.
+   This is documented and tested. The earlier claim that the value "never jumps backwards" was wrong.
+4. **`NextDelivery.resolve` checks the order.**
+   - It raises `ValueError` if the tracking belongs to another order. `get_next_delivery` reports that as `APIRequestFailedError`.
+   - Without an order slot it falls back to the tracking's slot.
+   - An estimate equal to the floor is not capped.
+5. **Number parsing:** non-finite or overflowing numbers become `None` (parsing never raises).
+6. **`Endpoints.delivery_tracking` validates the ID.** It accepts an int or a string of digits, and rejects bool, floats, negatives and other strings.
+   The URL is built before the request, so an invalid ID raises instead of looking like a failed request.
+7. **Personal data:** `CourierPosition` also hides its coordinates in `repr`.
+8. **`get_next_delivery()` rarely reports `DELIVERED`.** The order leaves the upcoming list within about a second, so the README tells
+   consumers to poll `get_delivery_tracking(order_id)` for the final state.
+9. **No README models table.** The README has no typed-models table, so none was added. The models are documented in "Tracking a delivery".

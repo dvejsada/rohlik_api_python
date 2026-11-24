@@ -144,8 +144,12 @@ class OrderService(BaseService):
 
     async def _fetch_delivery_tracking(
         self, order_id: int
-    ) -> tuple[TrackingOutcome, DeliveryTracking | None]:
-        """Fetch delivery tracking, telling "no tracking" (404) from a failure."""
+    ) -> tuple[TrackingOutcome, DeliveryTracking | None, Exception | None]:
+        """Fetch delivery tracking, telling "no tracking" (404) from a failure.
+
+        Returns the outcome, the parsed tracking (only for ``"ok"``) and, for
+        ``"failed"``, the underlying error to chain.
+        """
         # Built outside the try so an invalid order ID raises instead of looking
         # like a failed request.
         url = Endpoints.delivery_tracking(order_id)
@@ -154,18 +158,18 @@ class OrderService(BaseService):
         try:
             response = await self._http.get(url)
             if response.status == 404:
-                return "not_found", None
+                return "not_found", None, None
             response.raise_for_status()
             data = response.json()
         except _READ_ERRORS as err:
             _LOGGER.warning("Error fetching delivery tracking for %s: %s", order_id, err)
-            return "failed", None
-        if not isinstance(data, dict):
-            _LOGGER.warning(
-                "Unexpected delivery tracking response for %s: %s", order_id, type(data).__name__
-            )
-            return "failed", None
-        return "ok", DeliveryTracking.from_api(data)
+            return "failed", None, err
+        if not isinstance(data, dict) or not isinstance(data.get("orderId"), int):
+            # A 200 without an order ID (e.g. an error envelope) is not tracking.
+            error = ValueError(f"unexpected delivery tracking response: {type(data).__name__}")
+            _LOGGER.warning("Error fetching delivery tracking for %s: %s", order_id, error)
+            return "failed", None, error
+        return "ok", DeliveryTracking.from_api(data), None
 
     async def get_delivery_tracking(
         self, order_id: int, *, raise_on_error: bool = False
@@ -187,9 +191,11 @@ class OrderService(BaseService):
         Raises:
             APIRequestFailedError: With ``raise_on_error``, if the request fails.
         """
-        outcome, tracking = await self._fetch_delivery_tracking(order_id)
+        outcome, tracking, error = await self._fetch_delivery_tracking(order_id)
         if outcome == "failed" and raise_on_error:
-            raise APIRequestFailedError(f"Cannot fetch delivery tracking for order {order_id}")
+            raise APIRequestFailedError(
+                f"Cannot fetch delivery tracking for order {order_id}: {error}"
+            ) from error
         return tracking
 
     async def get_next_delivery(self) -> NextDelivery | None:
@@ -214,7 +220,7 @@ class OrderService(BaseService):
 
         Raises:
             APIRequestFailedError: If the upcoming orders or the tracking
-                request fails.
+                request fails, or the shop returns tracking for another order.
         """
         orders = await self.get_upcoming()
         if orders is None:
@@ -223,4 +229,7 @@ class OrderService(BaseService):
             return None
         order = orders[0]
         tracking = await self.get_delivery_tracking(order.id, raise_on_error=True)
-        return NextDelivery.resolve(order, tracking)
+        try:
+            return NextDelivery.resolve(order, tracking)
+        except ValueError as err:
+            raise APIRequestFailedError(f"Inconsistent delivery tracking: {err}") from err

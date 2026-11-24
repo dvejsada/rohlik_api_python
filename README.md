@@ -283,8 +283,9 @@ all_data = await client.get_data()
 
 > [!NOTE]
 > Delivery tracking uses an unofficial endpoint (`/api/v2/orders/{id}/delivery-tracking`)
-> verified on Rohlík.cz during a single delivery. Other shops may not offer it: there
-> `get_delivery_tracking` returns `None` and `get_next_delivery` falls back to the slot start. Behaviour for delayed or cancelled orders, several concurrent orders, express
+> verified on Rohlík.cz during a single delivery; other shops are unverified. If a shop answers
+> 404, `get_delivery_tracking` returns `None` and `get_next_delivery` falls back to the slot start;
+> any other failure makes `get_next_delivery` raise. Behaviour for delayed or cancelled orders, several concurrent orders, express
 > slots, and deliveries without an early-delivery request has not been observed yet.
 
 ```python
@@ -336,6 +337,10 @@ if raw is not None and (orders := UpcomingOrder.list_from_api(raw)):
     tracking = await client.orders.get_delivery_tracking(orders[0].id, raise_on_error=True)
     nxt = NextDelivery.resolve(orders[0], tracking)
 ```
+
+`resolve` raises `ValueError` if the tracking belongs to a different order than the one passed,
+for example a tracking result kept from a previous order after the upcoming list moved on.
+(`get_next_delivery` reports that case as `APIRequestFailedError`.)
 
 **Errors.** `get_delivery_tracking` and `get_upcoming` follow the usual read convention and return
 `None` on failure (a 404, meaning the order has no tracking, is not logged as a warning). Pass

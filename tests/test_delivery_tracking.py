@@ -583,3 +583,65 @@ class TestServiceFollowUps:
         mock_http.get.return_value = response([])
         await OrderService(mock_http, mock_auth).get_upcoming()
         mock_auth.ensure_logged_in.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Second review follow-ups
+# ---------------------------------------------------------------------------
+
+
+class TestSecondReview:
+    @pytest.mark.parametrize("order_id", [True, 12.9, "1_0", "-1", -1, "12a"])
+    def test_endpoint_rejects_non_integer_ids(self, order_id):
+        with pytest.raises((TypeError, ValueError)):
+            Endpoints.delivery_tracking(order_id)
+
+    def test_resolve_accepts_tracking_without_order_id(self):
+        data = load("in_queue_eta.json")
+        del data["orderId"]
+        result = NextDelivery.resolve(upcoming_order(), DeliveryTracking.from_api(data))
+        assert result.eta_source == "tracking"
+
+    def test_order_slot_takes_precedence_over_tracking_slot(self):
+        data = load("in_queue_no_eta.json")
+        data["deliverySlot"]["since"] = "2026-11-24T15:00:00Z"
+        result = NextDelivery.resolve(upcoming_order(), DeliveryTracking.from_api(data))
+        assert result.eta == SLOT_SINCE
+
+    def test_estimate_equal_to_floor_is_not_capped(self):
+        data = load("in_queue_eta.json")
+        data["progress"]["estimatedArrival"] = "2026-11-24T12:00:01Z"
+        result = NextDelivery.resolve(upcoming_order(), DeliveryTracking.from_api(data))
+        assert result.eta == SLOT_SINCE
+        assert result.eta_capped is False
+
+    def test_empty_courier_name_becomes_none(self):
+        data = load("in_queue_eta.json")
+        data["courier"]["displayName"] = ""
+        assert DeliveryTracking.from_api(data).courier_name is None
+
+    async def test_200_without_order_id_is_a_failure(self, mock_http, mock_auth, caplog):
+        mock_http.get.return_value = response({"status": 200, "messages": []})
+        service = OrderService(mock_http, mock_auth)
+        with caplog.at_level(logging.WARNING):
+            assert await service.get_delivery_tracking(1) is None
+        assert any("delivery tracking" in r.getMessage() for r in caplog.records)
+        mock_http.get.return_value = response({"status": 200, "messages": []})
+        with pytest.raises(APIRequestFailedError):
+            await service.get_delivery_tracking(1, raise_on_error=True)
+
+    async def test_raised_error_chains_the_cause(self, mock_http, mock_auth):
+        mock_http.get.side_effect = TimeoutError("slow")
+        with pytest.raises(APIRequestFailedError) as excinfo:
+            await OrderService(mock_http, mock_auth).get_delivery_tracking(1, raise_on_error=True)
+        assert isinstance(excinfo.value.__cause__, TimeoutError)
+
+    async def test_next_delivery_reports_mismatched_tracking_as_api_error(
+        self, mock_http, mock_auth
+    ):
+        other = load("on_the_way.json")
+        other["orderId"] = 1000000002
+        mock_http.get.side_effect = [response(load("upcoming_one.json")), response(other)]
+        with pytest.raises(APIRequestFailedError) as excinfo:
+            await OrderService(mock_http, mock_auth).get_next_delivery()
+        assert isinstance(excinfo.value.__cause__, ValueError)
