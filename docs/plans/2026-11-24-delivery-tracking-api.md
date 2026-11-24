@@ -1,47 +1,63 @@
 # Delivery tracking in rohlik-api — Implementation Plan (3.1–3.3)
 
-**Goal:** Give every consumer of `rohlik-api` (Home Assistant, rohlik-mcp, scripts) a typed,
+**Revision 2.** Incorporates the independent review (findings B1–B2, I1–I6 and the minors) of revision 1.
+
+**Goal:** give every consumer of `rohlik-api` (Home Assistant, rohlik-mcp, scripts) a typed,
 locale-independent view of a delivery in progress: status, ETA, stops ahead and courier
 position. It is built on the delivery-tracking endpoint observed through one complete live
-delivery on 2026-11-24 (see HA-RohlikCZ `docs/plans/2026-11-24-delivery-tracking-observations.md`).
+delivery on 2026-11-24 (HA-RohlikCZ `docs/plans/2026-11-24-delivery-tracking-observations.md`).
 
-**Scope:** three additive features. No existing method changes behaviour or shape.
+**Scope:** additive only. No existing method changes behaviour or shape. `get_data()` is not extended.
 
 | # | Feature | Requests |
 | --- | --- | --- |
 | 3.1 | `orders.get_delivery_tracking(order_id) -> DeliveryTracking \| None` | 1 |
-| 3.2 | `orders.get_upcoming() -> list[UpcomingOrder] \| None` | 1 |
-| 3.3 | `orders.get_next_delivery() -> NextDelivery \| None` | 2 (upcoming + tracking) |
+| 3.2 | `orders.get_upcoming() -> list[UpcomingOrder] \| None`, plus `UpcomingOrder.list_from_api(raw)` | 1 / 0 |
+| 3.3 | `NextDelivery.resolve(order, tracking)` (pure), plus `orders.get_next_delivery()` (thin wrapper) | 0 / 2 |
 
-Out of scope: the SSE stream, announcement changes, moving order detail to v4 and HA work.
-`get_data()` is not extended.
+Out of scope: the SSE stream, announcements, moving order detail to v4, the delivery destination, and HA work.
 
 ---
 
-## Endpoint facts this plan relies on (observed)
+## What was observed (and what was not)
 
-- `GET /api/v2/orders/{id}/delivery-tracking` returns 200 through the whole lifecycle with the
-  web-login cookie session. An unknown ID returns 404 with `{status, messages[{messageCode,…}]}`.
-- **Top level:** `orderId`, `deliverySlot{since, till, type}` (UTC `Z`), `destination{latitude,longitude}`,
-  `courier{displayName, phoneNumber, photoUrl}`, `earlyDelivery{available, requested, allowedFrom}`,
-  `progress`.
-- **`progress`:**
-  - It is `null` before the queue starts.
-  - Then `{generatedAt, deliveryStatus, stopsBefore, estimatedArrival, courierLocationStale, courierPosition{latitude, longitude, recordedAt}, courierMovement{…}, routeToStop{…}}`.
+Evidence: 262 tracking polls (all HTTP 200), the SSE stream, and 3 upcoming-orders samples, for one
+Rohlík.cz order (`ON_TIME` slot, early delivery requested by the customer at T−1 h).
+
+- **Response:** `orderId`, `deliverySlot{since, till, type}` (UTC `Z`; `since` is `…:00:01`),
+  `destination{latitude, longitude}`, `courier{displayName, phoneNumber, photoUrl}`,
+  `earlyDelivery{available, requested, allowedFrom}`, `progress`.
+- **`progress: null` before the queue starts.** `courier` is then **null as well** (9 of 9 such polls).
+  `progress`, when present, is `{generatedAt, deliveryStatus, stopsBefore, estimatedArrival,
+  courierLocationStale, courierPosition{latitude, longitude, recordedAt}, courierMovement, routeToStop}`.
 - **Status:** `IN_QUEUE → ON_THE_WAY → ARRIVED → HANDING_OVER → DELIVERED`.
-  - `estimatedArrival` may be null early in `IN_QUEUE`.
-  - It is kept after `DELIVERED`.
+  - `estimatedArrival` is null at first in `IN_QUEUE` and is kept after `DELIVERED`. The kept value is
+    the last ETA, **not** the arrival time (ETA 12:46:18; `ARRIVED` seen 12:45:51).
   - `stopsBefore` becomes null at `DELIVERED`.
   - Position exists from `ON_THE_WAY` to `HANDING_OVER`.
-- **`earlyDelivery`:** `allowedFrom` is `slot.since − 1 h` once `requested`. The shop's own texts show
-  the slot start until early delivery is requested, even when the courier ETA is earlier.
-- **Timestamp formats:** `2026-11-24T12:00:01Z`, `…19.886Z`, `…20.12272713Z` (9 fractional
-  digits) and in upcoming orders `2026-11-24T13:00:01.000+0100`. All parse with
-  `datetime.fromisoformat` on Python ≥ 3.13 (the package minimum), giving aware datetimes.
-- **`/api/v3/orders/upcoming`:** returns `[]` with no order. The order drops out within 1 s of
-  `DELIVERED`. Item keys: `id, itemsCount, itemsTotalQuantity, priceComposition.total{amount,currency},
-  orderTime, deliverySlot{id,type,since,till}, address, payment, itemImages, availableActions,
+- **`generatedAt` is not "now".**
+  - In `IN_QUEUE`, 40 of 209 polls returned a snapshot more than 60 s old, and the oldest was 477 s.
+  - After `DELIVERED` it is frozen at the delivery moment. The endpoint stayed 200 for the 20 minutes observed.
+- **`earlyDelivery.allowedFrom`** equals `slot.since − 1 h` once requested.
+  - The shop's own texts switched from slot start to ETA in the same minute as three other things: the
+    request, the T−1 h mark and stops 4 → 3.
+  - **It is unknown which caused it.** The capping rule below is therefore a documented heuristic.
+- **Timestamps** use `…Z`, `….886Z`, `….12272713Z` (9 digits) and, in upcoming orders, `….000+0100`.
+  All parse to aware datetimes with `datetime.fromisoformat` on Python ≥ 3.13 (the package minimum).
+- **404:** seen **only for a made-up order ID**. A 404 for a finished, cancelled or old order was **not**
+  observed (a past order returned 200 with `progress: null`).
+- **Upcoming orders** returned `[]` with no order, and dropped the order within about 1 s of `DELIVERED`
+  (one sample). Item keys: `id, itemsCount, itemsTotalQuantity, priceComposition.total{amount, currency},
+  orderTime, deliverySlot{id, type, since, till}, address, payment, itemImages, availableActions,
   expressDeliveryPromise, pblLink, invoiceAwaitingPayment`.
+- **Never observed:**
+  - early delivery not requested all the way to arrival
+  - two concurrent orders
+  - a slot type other than `ON_TIME`
+  - a cancelled or delayed order
+  - any shop other than Rohlík.cz
+
+  The README says so.
 
 ---
 
@@ -49,54 +65,44 @@ Out of scope: the SSE stream, announcement changes, moving order detail to v4 an
 
 ### Naming
 
-- `TrackingStatus` (`StrEnum`): constants for the five observed status values. The models keep
-  the **raw string**, so a future value survives parsing.
-- 3.3's result is named `NextDelivery`. That avoids a clash with `DeliveryStatus` and with the
-  HA integration's own names.
+- **`TrackingStatus` (`StrEnum`):** constants for the five observed values. Models keep the **raw string**.
+- **`DeliveryEtaSource = Literal["tracking", "slot"]`:** named to avoid HA's `EtaSource` in `eta.py`.
+- **`NextDelivery`:** the result of 3.3.
 
-### Datetime helper (`rohlik_api/helpers.py`)
+### Datetime helper (`helpers.py`, exported)
 
 ```python
 def parse_datetime(value: Any) -> datetime | None:
-    """Parse an API timestamp into an aware datetime, or None.
-
-    Accepts the formats the API uses (``Z``, ``+0100``, up to 9 fractional digits,
-    truncated to microseconds by the stdlib). Returns None for None, non-strings,
-    unparseable or offset-less (naive) values: callers never get a naive datetime.
-    """
+    """Aware datetime from an API timestamp, or None (None, non-str, unparseable, naive)."""
 ```
 
-This is public, exported, and unit-tested against every observed format. Naive values become
-`None` instead of guessing a timezone. None of the observed tracking or order timestamps is naive.
+### Models (`models.py`, "Delivery tracking" section)
 
-### Models (`rohlik_api/models.py`, new "Delivery tracking" section)
+Every model is a `@dataclass(slots=True)` with `from_api`. Parsing never raises: wrong types or a missing level give `None`.
+Integers reject `bool`. Coordinates must be real numbers and not `bool`.
 
-Plain `@dataclass(slots=True)` with `from_api`, like existing models. Parsing is defensive: every
-level may be missing or `null`, wrong types become `None`, and parsing never raises.
+**Personal data:** `courier_name` and `courier_position` are declared with `field(repr=False)`, so
+logging a model does not leak them. A test asserts this. Their docstrings say they must be redacted in logs
+and diagnostics.
 
 ```python
-@dataclass(slots=True)
-class Coordinates:
-    latitude: float
-    longitude: float
-
 @dataclass(slots=True)
 class CourierPosition:
     latitude: float
     longitude: float
     recorded_at: datetime | None
-    # from_api returns None unless both coordinates are real numbers (bool excluded)
 
 @dataclass(slots=True)
 class DeliveryProgress:
-    """The live part of tracking; null before the order is queued.
-    Shaped so the SSE ``eventData`` (same keys) can reuse it later."""
-    status: str | None                 # raw deliveryStatus
+    """Live part of tracking (`progress`); None before the order is queued.
+    Same keys as the SSE eventData, for later reuse. `generated_at` may be minutes old,
+    and is frozen after DELIVERED — it is not the time of the request."""
+    status: str | None
     generated_at: datetime | None
     estimated_arrival: datetime | None
-    stops_before: int | None           # 0 and None are different
-    courier_position: CourierPosition | None
+    stops_before: int | None                       # 0 and None differ
     courier_location_stale: bool | None
+    courier_position: CourierPosition | None = field(default=None, repr=False)
 
 @dataclass(slots=True)
 class DeliveryTracking:
@@ -104,74 +110,95 @@ class DeliveryTracking:
     slot_since: datetime | None
     slot_till: datetime | None
     slot_type: str | None
-    early_delivery_available: bool
-    early_delivery_requested: bool
+    early_delivery_available: bool | None
+    early_delivery_requested: bool | None
     early_delivery_allowed_from: datetime | None
-    courier_name: str | None           # displayName only — first name in the sample
-    destination: Coordinates | None    # the customer's delivery point
     progress: DeliveryProgress | None
+    courier_name: str | None = field(default=None, repr=False)   # displayName; None until queued
 
-    # convenience, all derived from progress / slot:
-    status -> str | None
-    estimated_arrival -> datetime | None
+    status -> str | None                 # progress.status
+    estimated_arrival -> datetime | None # raw courier ETA; after DELIVERED: last ETA, not arrival time
     stops_before -> int | None
-    is_active -> bool       # IN_QUEUE / ON_THE_WAY / ARRIVED / HANDING_OVER
-    has_arrived -> bool     # ARRIVED / HANDING_OVER
-    is_delivered -> bool    # DELIVERED
-    promised_arrival -> datetime | None  # see below
+    is_active -> bool                    # status is not None and != DELIVERED  (unknown values count as active)
+    has_arrived -> bool                  # ARRIVED / HANDING_OVER
+    is_delivered -> bool                 # DELIVERED
+    arrival_floor -> datetime | None     # see below
 ```
 
-Left out on purpose: `courier.phoneNumber`, `courier.photoUrl`, `courierMovement` and
-`routeToStop` polylines (personal data or map-rendering detail that nothing needs yet). There is
-no `raw` field, because it would carry the phone number. The docstrings flag `courier_name`,
-`destination` and `courier_position` as personal data, so consumers redact them in logs and
-diagnostics.
+Left out on purpose:
+- `destination` (the customer's location; consumers know their own address, and it can be added later
+  but never removed)
+- the phone number and photo
+- the `courierMovement` and `routeToStop` polylines
+- any `raw` field
 
-**`promised_arrival`** turns the observation into library logic:
-
-```
-eta = progress.estimated_arrival
-if eta is None:                    return None
-if has_arrived or is_delivered:    return eta          # no capping once it's over
-floor = early_delivery_allowed_from if early_delivery_requested else slot_since
-return max(eta, floor) if floor else eta
-```
-
-In words: the courier plan, but never earlier than the shop allows the courier to arrive.
+**`arrival_floor`** is the earliest time the shop lets the courier arrive. It is `early_delivery_allowed_from`
+when early delivery has been requested, otherwise `slot_since`, or `None` if unknown. It is plain data, and the
+heuristic is applied in 3.3 only.
 
 ```python
 @dataclass(slots=True)
 class UpcomingOrder:
     id: int
     slot_id: int | None
-    slot_type: str | None            # ON_TIME / EXPRESS / …
+    slot_type: str | None
     slot_since: datetime | None
     slot_till: datetime | None
     order_time: datetime | None
-    items_count: int | None          # order lines
-    items_total_quantity: int | None # units
+    items_count: int | None              # order lines
+    items_total_quantity: int | None     # units
     total_price: float | None
     currency: str | None
     available_actions: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_api(cls, data) -> UpcomingOrder | None   # None without an int id
+    @classmethod
+    def list_from_api(cls, data) -> list[UpcomingOrder]
+        # parses a raw upcoming list (e.g. get_data()["next_order"]); skips bad entries;
+        # sorted by slot_since in absolute time, orders without a slot last
 ```
 
-Left out: `address`, `payment`, `itemImages`, `pblLink`, `invoiceAwaitingPayment`,
-`expressDeliveryPromise` (the last was always null when observed; it can be added once seen populated).
-`from_api` returns `None` for an entry without an integer `id`, and the list skips those entries.
+Left out: `address`, `payment`, `itemImages`, `pblLink`, `invoiceAwaitingPayment`, `expressDeliveryPromise`.
 
 ```python
-EtaSource = Literal["tracking", "slot"]
-
 @dataclass(slots=True)
 class NextDelivery:
     order: UpcomingOrder
-    tracking: DeliveryTracking | None  # None: not available (404/failed)
-    eta: datetime | None               # tracking.promised_arrival, else order.slot_since
-    eta_source: EtaSource | None
-    status: str | None                 # tracking status, None without tracking
+    tracking: DeliveryTracking | None   # None: the order has no tracking (404)
+    eta: datetime | None
+    eta_source: DeliveryEtaSource | None
+    eta_capped: bool                    # eta was raised to the arrival floor
+    status: str | None
+
+    @classmethod
+    def resolve(cls, order: UpcomingOrder, tracking: DeliveryTracking | None) -> NextDelivery:
+        """Pure: no I/O. Lets consumers that already hold the upcoming list and a
+        tracking result (e.g. HA via get_data()) reuse the ETA rule without extra requests."""
 ```
 
-### Endpoint (`rohlik_api/endpoints.py`)
+**ETA rule in `resolve`** (a heuristic, documented as based on one delivery):
+
+```
+raw = tracking.estimated_arrival if tracking else None
+if raw is not None:
+    floor = tracking.arrival_floor
+    if tracking.status == IN_QUEUE and floor is not None and raw < floor:
+        eta, capped = floor, True            # shop won't deliver before the floor
+    else:
+        eta, capped = raw, False             # ON_THE_WAY and later: courier plan as is
+    source = "tracking"
+elif order.slot_since is not None:
+    eta, source, capped = order.slot_since, "slot", False
+else:
+    eta, source, capped = None, None, False
+```
+
+The cap is applied **only while `IN_QUEUE`**, so the value never jumps backwards when the courier is
+already on the way. `max()` only raises early ETAs, so it cannot hide a delay. The raw value is always
+available as `tracking.estimated_arrival`.
+
+### Endpoint (`endpoints.py`)
 
 ```python
 @classmethod
@@ -179,125 +206,157 @@ def delivery_tracking(cls, order_id: int) -> str:
     return f"/api/v2/orders/{int(order_id)}/delivery-tracking"
 ```
 
-### Service methods (`rohlik_api/services/orders.py`)
+### Service methods (`services/orders.py`)
 
-**3.1 `get_delivery_tracking(order_id)`**
-- Same pattern as `get_detail`.
-- `404` → `None`, no warning logged, because it is a normal answer for a finished or unknown order.
-- `HTTP_ERRORS` and other `raise_for_status` failures → warning, `None`.
-- JSON decode error or non-dict body → warning, `None`.
-- Otherwise `DeliveryTracking.from_api(body)`.
+A private `_fetch_delivery_tracking(order_id) -> tuple[Literal["ok", "not_found", "failed"], DeliveryTracking | None]` serves both public paths.
 
-**3.2 `get_upcoming()`**
-- One GET on `Endpoints.NEXT_ORDER`. Returns `None` on failure or a non-list body, so the shared
-  `_fetch_endpoint` can't be used (it is typed for dicts and doesn't check the body type).
-- Otherwise it parses each entry and returns them sorted by `slot_since`, with orders without a slot last.
-- `get_next()` stays as it is (raw).
+| Outcome | Return value | Log |
+| --- | --- | --- |
+| 200 with a dict body | `"ok"`, model | — |
+| 404 | `"not_found"`, `None` | — (a normal answer) |
+| any other status, `HTTP_ERRORS`, `ValueError` from `Response.json()` (invalid JSON is not in `HTTP_ERRORS`), non-dict body | `"failed"`, `None` | warning |
 
-**3.3 `get_next_delivery()`**
-1. `orders = await self.get_upcoming()`.
-   - If `orders is None`, raise `APIRequestFailedError("Cannot fetch upcoming orders")`. Returning
-     `None` here would be indistinguishable from "no order", and a consumer would wrongly clear its state.
-   - If `orders == []`, return `None`.
-2. Take `order = orders[0]` (the soonest slot).
-3. Fetch `tracking = await self.get_delivery_tracking(order.id)`, which is `None` on 404 or failure.
-4. Resolve the ETA:
-   - `eta = tracking.promised_arrival if tracking else None`
-   - if `eta` is set, `eta_source = "tracking"`
-   - otherwise, if `order.slot_since` is set, use it with `eta_source = "slot"`
-   - otherwise `eta = eta_source = None`
-5. Return `NextDelivery(order, tracking, eta, eta_source, tracking.status if tracking else None)`.
+An authentication failure (`InvalidCredentialsError` / `APIRequestFailedError` from `_ensure_logged_in`)
+propagates, as in every other read method.
 
-This is documented as "the soonest order only". Consumers with several concurrent orders call
-3.2 + 3.1 themselves.
+- **3.1 `get_delivery_tracking(order_id)`** is public and returns the model or `None` for both
+  `"not_found"` and `"failed"`, which keeps the library's read convention. The docstring says that callers
+  who must tell the two apart should use `get_next_delivery()`.
+- **3.2 `get_upcoming()`** makes one GET on `Endpoints.NEXT_ORDER`. A failure, invalid JSON or a non-list body
+  gives `None`. Otherwise it returns `UpcomingOrder.list_from_api(body)`. `get_next()` is unchanged.
+- **3.3 `get_next_delivery()`**:
+  1. `orders = await self.get_upcoming()`. `None` raises `APIRequestFailedError("Cannot fetch upcoming orders")`;
+     `[]` returns `None`.
+  2. `outcome, tracking = await self._fetch_delivery_tracking(orders[0].id)`. `"failed"` raises
+     `APIRequestFailedError("Cannot fetch delivery tracking")`.
+  3. Return `NextDelivery.resolve(orders[0], tracking)`.
 
-The raise in step 1 is the only deviation from the "read methods return None" convention. It is
-justified in the docstring and README. Alternative for review: return `None` and accept the ambiguity.
+  The return value means:
+  - `None`: there is no upcoming order.
+  - A raised error: the state is unknown, so the caller should keep its previous state.
+  - Only the soonest order is resolved. Consumers with concurrent orders combine 3.2 + 3.1 + `resolve` themselves.
+
+  Raising is consistent with read methods already raising on auth failure.
 
 ### Exports, docs, version
 
-- `__init__.py`: export `DeliveryTracking`, `DeliveryProgress`, `CourierPosition`, `Coordinates`,
-  `UpcomingOrder`, `NextDelivery`, `TrackingStatus`, `parse_datetime`.
-- README:
-  - Orders service: add three lines to the API reference.
-  - New "Tracking a delivery" example covering `get_next_delivery()`, status/ETA/stops and `promised_arrival` semantics.
-  - Note that the endpoint is unofficial, was verified on Rohlík.cz only, and that other shops may return 404 (→ `None`).
-  - Note which fields are personal data.
-- Typed-models table: add the new models.
-- `__version__ = "0.4.0"`. Release via PUBLISHING.md after CI (ruff, black, mypy, pytest) passes.
+- **`__init__.py`:** export `DeliveryTracking`, `DeliveryProgress`, `CourierPosition`, `UpcomingOrder`,
+  `NextDelivery`, `TrackingStatus`, `DeliveryEtaSource`, `parse_datetime`.
+- **README:**
+  - three API-reference lines
+  - a "Tracking a delivery" example
+  - the ETA rule and `eta_capped`
+  - `generated_at` caveats
+  - the personal-data fields
+  - "unofficial endpoint, verified on Rohlík.cz with one delivery; other shops may 404" and the never-observed list
+- **Typed-models table:** the new models.
+- **`__version__ = "0.4.0"`.** Release via PUBLISHING.md once CI (ruff, black, mypy, pytest) passes.
 
 ---
 
 ## Tests
 
-**Fixtures:** `tests/fixtures/delivery_tracking/*.json`. They are generated once from the
-2026-11-24 capture by a throwaway local script that is **not** committed. The script:
-- replaces IDs with fakes
-- sets coordinates to a fixed public point (0.0 offsets from a dummy)
-- sets the courier name to `"Courier"` and the phone number to `"+420000000000"`, so tests prove the phone is dropped
-- puts empty strings in the polylines
+### Fixtures — whitelist, hand-written
 
-All times are kept. The review checks the files by hand before they are committed.
+`tests/fixtures/delivery_tracking/*.json` are **written by hand** using only the keys the models read.
+Each one also has the keys that must be proven dropped (`phoneNumber`, `photoUrl`, `destination`,
+`courierMovement`, `routeToStop`). The values are constants:
 
-| Fixture | Source state |
+| Field | Value |
 | --- | --- |
-| `before_queue.json` | `progress: null`, early delivery available |
+| order IDs | `1000000001`, `1000000002` |
+| coordinates | `50.0`, `14.0` |
+| courier | `"Courier"`, `"+420000000000"` |
+| polylines | `"x"` |
+
+Timestamps and statuses follow the observed timeline. Nothing is copied from the capture.
+
+A one-off local check, **not committed**, greps the fixture directory for the real order ID, phone
+number and coordinate prefixes. The real values are read from the private capture outside the repo, and the check runs before the
+fixtures are committed. `tests/` is not packaged (MANIFEST.in).
+
+| Fixture | State |
+| --- | --- |
+| `before_queue.json` | `progress: null`, `courier: null`, early delivery available |
 | `in_queue_no_eta.json` | IN_QUEUE, 11 stops, ETA null |
-| `in_queue_eta.json` | IN_QUEUE, ETA, not early-requested (ETA before slot) |
-| `in_queue_early.json` | IN_QUEUE, early requested, allowedFrom |
-| `on_the_way.json` | position + movement + route |
+| `in_queue_eta.json` | IN_QUEUE, ETA before the slot, early delivery **not** requested |
+| `in_queue_early.json` | IN_QUEUE, ETA before the slot, early delivery requested (`allowedFrom`) |
+| `on_the_way.json` | ETA before the slot, position, movement, route |
 | `arrived.json`, `handing_over.json` | |
-| `delivered.json` | stops null, position null, ETA kept |
+| `delivered.json` | stops null, position null, ETA kept, early delivery unavailable |
 | `not_found.json` | 404 envelope |
-| `upcoming_one.json`, `upcoming_empty.json` | |
+| `upcoming_one.json`, `upcoming_two.json` (one `Z`, one `+0100`, out of order), `upcoming_empty.json` | |
 
-**Unit tests** (`tests/test_models.py`, `test_helpers.py`, `test_services.py`, `test_endpoints.py`):
+### Cases
 
-- **`parse_datetime`:** `Z`, ms, 9 fractional digits, `+0100`, `+01:00`, naive → None, garbage → None, non-str → None.
-- **`DeliveryTracking.from_api`** for each fixture:
-  - fields, properties, and that `progress` is None for `before_queue`
-  - positions: non-numeric or bool coordinates → `None`
-  - the phone number appears nowhere in `dataclasses.asdict(model)`
-  - an unknown status string is kept and `is_active` is False
-- **`promised_arrival`:**
-  - capped to `slot_since` (not requested)
-  - capped to `allowed_from` (requested)
-  - not capped when the ETA is later
-  - not capped once arrived or delivered
-  - None without an ETA
-- **`UpcomingOrder.from_api`:** full fixture, missing slot, missing ID (skipped), sorting with multiple orders.
+- **`parse_datetime`:**
+  - `Z`, ms, 9 fractional digits, `+0100`, `+01:00` parse
+  - naive, garbage and non-str give `None`
+- **`DeliveryTracking.from_api`** (each fixture):
+  - fields and properties
+  - `before_queue` has `progress is None` and `courier_name is None`
+  - an unknown status is kept, and `is_active` is **True**
+  - bool or str `stopsBefore` gives `None`
+  - bool or str coordinates give no position
+  - the phone number is not in `dataclasses.asdict(model)`
+  - `courier_name` and the coordinates are not in `repr(model)`
+- **`arrival_floor`:** requested gives `allowed_from`, otherwise `slot_since`, and `None` when the slot is missing.
+- **`NextDelivery.resolve`:**
+  - IN_QUEUE with the ETA before the floor is capped, with `eta_capped=True`
+  - IN_QUEUE with the ETA after the floor is the raw value
+  - `on_the_way` with the ETA before the slot is **not** capped
+  - `arrived`, `delivered` are raw
+  - a tracking result without an ETA falls back to the slot
+  - no tracking falls back to the slot
+  - no slot and no tracking give `None`
+- **`UpcomingOrder`:**
+  - `from_api` with the full item, a missing slot, and a missing or bool ID (gives `None`)
+  - `list_from_api` with a non-list input gives `[]`
+  - sorting across `Z` and `+0100`
 - **Service:**
-  - `get_delivery_tracking`: 200 → model; 404 → None and no warning (caplog); 500 → None and a warning; ClientError and timeout → None; non-dict JSON → None.
-  - `get_upcoming`: list → models; `[]` → `[]`; failure → None.
+  - `get_delivery_tracking`:
+    - 200 gives the model
+    - 404 gives `None` and logs no warning (caplog)
+    - 500 gives `None` with a warning
+    - `ClientError` and timeout give `None`
+    - invalid JSON (`ValueError`) and a non-dict body give `None`
+    - an auth error propagates
+  - `get_upcoming`:
+    - a list is parsed
+    - `[]` gives `[]`
+    - a failure, invalid JSON or a non-list body give `None`
   - `get_next_delivery`:
-    - no orders → None
-    - upcoming failure → raises `APIRequestFailedError`
-    - tracking with ETA → source "tracking"
-    - tracking 404 → source "slot"
-    - tracking without ETA → "slot"
-    - picks the soonest of two orders
-    - exactly 2 GETs with the expected paths
-- **Endpoint builder:** path, `int()` coercion.
+    - no orders give `None`
+    - an upcoming failure raises
+    - a tracking failure raises
+    - a tracking 404 gives `eta_source="slot"`
+    - the soonest of two orders is picked
+    - exactly two GETs are made, with the expected paths
+- **Endpoint builder:** the path and `int()` coercion.
 
-**Live check (manual, not in CI):** an opt-in script calls `get_next_delivery()` during a real
-delivery and prints the redacted fields. It is run once before release.
+**Live check (manual, before release):** an opt-in local script runs `get_next_delivery()` during a real
+delivery and prints redacted fields. If possible, also check a delivery **without** an early-delivery request,
+the case the heuristic most depends on.
 
 ---
 
 ## Steps
 
 1. `parse_datetime` + tests.
-2. Models + `TrackingStatus` + model tests (fixtures added here).
-3. Endpoint builder + `get_delivery_tracking` + tests.
-4. `get_upcoming` + tests.
-5. `get_next_delivery` + tests.
-6. Exports, README, version 0.4.0; run ruff, black, mypy, pytest.
-7. Live check during the next delivery, then release.
+2. Hand-written fixtures + the local leak check (not committed).
+3. Models + `TrackingStatus` + model tests.
+4. Endpoint builder, `_fetch_delivery_tracking`, `get_delivery_tracking` + tests.
+5. `UpcomingOrder.list_from_api`, `get_upcoming` + tests.
+6. `NextDelivery.resolve`, `get_next_delivery` + tests.
+7. Exports, README, version 0.4.0; ruff, black, mypy, pytest.
+8. Live check on the next delivery, then release.
 
-## Open questions for review
+## Decisions taken in review
 
-1. Is raising in `get_next_delivery` when upcoming fails right, or should it stay `None`?
-2. Should `promised_arrival` be the default `eta` in `NextDelivery`, with the raw ETA always on
-   `tracking.estimated_arrival`, or the other way round?
-3. Is `destination` worth exposing (distance calculation) given that it is the customer's location?
-4. Is a flat `DeliveryTracking` with `progress` nested the right shape for the later SSE reuse?
+| Question | Decision |
+| --- | --- |
+| Raise in 3.3 when upcoming fails? | Yes, and also when tracking fails (B2). `None` means only "no upcoming order" |
+| Default `eta`? | The courier ETA, raised to the floor only while `IN_QUEUE`, flagged by `eta_capped`. The raw value stays on `tracking.estimated_arrival` |
+| Expose `destination`? | No, not in 0.4.0 |
+| Nested `progress`? | Yes. Convenience properties on `DeliveryTracking` keep access flat |
+| Should 3.3 live in the library? | Yes, as a pure `resolve()` plus a thin wrapper, so HA can use the rule without a duplicate upcoming request |
