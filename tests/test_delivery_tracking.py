@@ -175,6 +175,7 @@ class TestDeliveryTrackingParsing:
         assert t.progress is None
         assert t.order_id is None
         assert t.courier_name is None
+        assert t.destination is None
 
     def test_personal_data_is_not_kept(self):
         dumped = json.dumps(dataclasses.asdict(tracking("on_the_way.json")), default=str)
@@ -497,49 +498,6 @@ class TestStrictParsing:
     def test_upcoming_slot_till(self):
         assert upcoming_order().slot_till == datetime(2026, 11, 24, 12, 15, tzinfo=UTC)
 
-    def test_destination_is_parsed(self):
-        t = tracking("before_queue.json")
-        assert t.destination == DeliveryDestination(latitude=50.0, longitude=14.0)
-        assert t.courier_position is None
-        assert t.courier_distance is None
-
-    @pytest.mark.parametrize(
-        "destination",
-        [{"latitude": 50.0}, {"latitude": "50", "longitude": 14.0}, "50,14", None],
-    )
-    def test_incomplete_destination_is_dropped(self, destination):
-        data = load("on_the_way.json")
-        data["destination"] = destination
-        t = DeliveryTracking.from_api(data)
-        assert t.destination is None
-        assert t.courier_position is not None
-        assert t.courier_distance is None
-
-    def test_courier_distance_on_the_way(self):
-        t = tracking("on_the_way.json")
-        assert t.courier_position == t.progress.courier_position
-        # 0.001° of latitude ≈ 111.2 m, 0.001° of longitude at 50° N ≈ 71.5 m.
-        assert t.courier_distance == pytest.approx(132.2, abs=0.5)
-
-    def test_distance_to_known_city_pair(self):
-        prague = CourierPosition(latitude=50.0755, longitude=14.4378, recorded_at=None)
-        brno = DeliveryDestination(latitude=49.1951, longitude=16.6068)
-        assert prague.distance_to(brno) == pytest.approx(185_000, rel=0.01)
-
-    def test_distance_to_same_point_is_zero(self):
-        here = CourierPosition(latitude=50.0, longitude=14.0, recorded_at=None)
-        assert here.distance_to(DeliveryDestination(latitude=50.0, longitude=14.0)) == 0.0
-
-    def test_no_progress_means_no_courier_position(self):
-        t = tracking("before_queue.json")
-        assert t.progress is None
-        assert t.courier_position is None
-
-    def test_destination_repr_hides_coordinates(self):
-        t = tracking("on_the_way.json")
-        assert "50.0" not in repr(t.destination)
-        assert "50.0" not in repr(t) and "14.0" not in repr(t)
-
     def test_courier_position_repr_hides_coordinates(self):
         position = tracking("on_the_way.json").progress.courier_position
         assert "50.001" not in repr(position) and "14.001" not in repr(position)
@@ -688,3 +646,119 @@ class TestSecondReview:
         with pytest.raises(APIRequestFailedError) as excinfo:
             await OrderService(mock_http, mock_auth).get_next_delivery()
         assert isinstance(excinfo.value.__cause__, ValueError)
+
+
+class TestCourierLocation:
+    def test_destination_is_parsed(self):
+        t = tracking("before_queue.json")
+        assert t.destination == DeliveryDestination(latitude=50.0, longitude=14.0)
+        assert t.progress is None
+        assert t.courier_position is None
+        assert t.courier_distance is None
+
+    @pytest.mark.parametrize(
+        "coordinates",
+        [
+            {"latitude": 50.0},
+            {"latitude": "50", "longitude": 14.0},
+            {"latitude": True, "longitude": 14.0},
+            {"latitude": float("nan"), "longitude": 14.0},
+            {"latitude": 50.0, "longitude": float("inf")},
+            {"latitude": 90.5, "longitude": 14.0},
+            {"latitude": -91, "longitude": 14.0},
+            {"latitude": 50.0, "longitude": 180.5},
+            {"latitude": 500, "longitude": 1e6},
+            {"latitude": 0, "longitude": 0},
+            {"latitude": 0.0, "longitude": 0.0},
+            "50,14",
+            None,
+        ],
+    )
+    def test_invalid_coordinates_are_dropped(self, coordinates):
+        data = load("on_the_way.json")
+        data["destination"] = coordinates
+        data["progress"]["courierPosition"] = (
+            {**coordinates, "recordedAt": "2026-11-24T11:40:19Z"}
+            if isinstance(coordinates, dict)
+            else coordinates
+        )
+        t = DeliveryTracking.from_api(data)
+        assert t.destination is None
+        assert t.courier_position is None
+        assert t.courier_distance is None
+
+    @pytest.mark.parametrize(
+        "coordinates",
+        [
+            {"latitude": 50, "longitude": 14},
+            {"latitude": 90, "longitude": 180},
+            {"latitude": -90, "longitude": -180},
+            {"latitude": 0, "longitude": 14.0},
+        ],
+    )
+    def test_edge_and_integer_coordinates_are_kept(self, coordinates):
+        data = load("on_the_way.json")
+        data["destination"] = coordinates
+        destination = DeliveryTracking.from_api(data).destination
+        assert destination == DeliveryDestination(
+            latitude=float(coordinates["latitude"]), longitude=float(coordinates["longitude"])
+        )
+        assert isinstance(destination.latitude, float)
+
+    def test_missing_destination_keeps_position(self):
+        data = load("on_the_way.json")
+        del data["destination"]
+        t = DeliveryTracking.from_api(data)
+        assert t.destination is None
+        assert t.courier_position is not None
+        assert t.courier_distance is None
+
+    def test_courier_distance_on_the_way(self):
+        t = tracking("on_the_way.json")
+        assert t.courier_position is t.progress.courier_position
+        # 0.001° of latitude ≈ 111.2 m, 0.001° of longitude at 50° N ≈ 71.5 m.
+        assert t.courier_distance == pytest.approx(132.2, abs=0.5)
+
+    def test_courier_distance_ignores_staleness(self):
+        """Documented: callers check courier_location_stale themselves."""
+        data = load("on_the_way.json")
+        data["progress"]["courierLocationStale"] = True
+        t = DeliveryTracking.from_api(data)
+        assert t.progress.courier_location_stale is True
+        assert t.courier_distance == pytest.approx(132.2, abs=0.5)
+
+    def test_distance_to_known_city_pair(self):
+        prague = CourierPosition(latitude=50.0755, longitude=14.4378, recorded_at=None)
+        brno = DeliveryDestination(latitude=49.1951, longitude=16.6068)
+        assert prague.distance_to(brno) == pytest.approx(185_000, rel=0.01)
+
+    def test_distance_to_same_point_is_zero(self):
+        here = CourierPosition(latitude=50.0, longitude=14.0, recorded_at=None)
+        assert here.distance_to(DeliveryDestination(latitude=50.0, longitude=14.0)) == 0.0
+
+    def test_distance_to_antipode_is_half_the_circumference(self):
+        here = CourierPosition(latitude=0.0, longitude=1.0, recorded_at=None)
+        there = DeliveryDestination(latitude=0.0, longitude=-179.0)
+        assert here.distance_to(there) == pytest.approx(20_015_000, rel=0.001)
+
+    def test_distance_to_any_geo_point(self):
+        @dataclasses.dataclass
+        class Home:
+            latitude: float
+            longitude: float
+
+        here = CourierPosition(latitude=50.001, longitude=14.0, recorded_at=None)
+        assert here.distance_to(Home(50.0, 14.0)) == pytest.approx(111.2, abs=0.5)
+        assert here.distance_to(here) == 0.0
+
+    def test_destination_repr_hides_coordinates(self):
+        t = tracking("on_the_way.json")
+        assert repr(t.destination) == "DeliveryDestination()"
+        assert repr(t.progress.courier_position).startswith("CourierPosition(recorded_at=")
+        text = repr(t)
+        assert "50.0" not in text and "14.0" not in text
+
+    def test_asdict_includes_the_destination(self):
+        """Contract: asdict() is not redacted, so consumers must redact it."""
+        dumped = dataclasses.asdict(tracking("on_the_way.json"))
+        assert dumped["destination"] == {"latitude": 50.0, "longitude": 14.0}

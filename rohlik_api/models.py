@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from .helpers import format_price, parse_datetime
 
@@ -805,6 +805,38 @@ def _distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * _EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
 
 
+def _coordinates(data: Any) -> tuple[float, float] | None:
+    """Return (latitude, longitude) from ``data`` if valid, else None.
+
+    Both must be real numbers within range. Exactly (0, 0), a point in the
+    Gulf of Guinea, is treated as a missing-value placeholder.
+    """
+    data = _as_dict(data)
+    latitude = _as_float(data.get("latitude"))
+    longitude = _as_float(data.get("longitude"))
+    if latitude is None or longitude is None:
+        return None
+    if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
+        return None
+    if latitude == 0.0 and longitude == 0.0:
+        return None
+    return latitude, longitude
+
+
+class GeoPoint(Protocol):
+    """Anything with ``latitude`` and ``longitude`` in degrees.
+
+    :meth:`CourierPosition.distance_to` accepts any such object, e.g. a
+    :class:`DeliveryDestination`, another position or your own home point.
+    """
+
+    @property
+    def latitude(self) -> float: ...
+
+    @property
+    def longitude(self) -> float: ...
+
+
 @dataclass(slots=True)
 class DeliveryDestination:
     """Where the order is delivered (the response's ``destination``).
@@ -822,13 +854,11 @@ class DeliveryDestination:
 
     @classmethod
     def from_api(cls, data: Any) -> DeliveryDestination | None:
-        """Build a destination from ``destination``, or None if incomplete."""
-        data = _as_dict(data)
-        latitude = _as_float(data.get("latitude"))
-        longitude = _as_float(data.get("longitude"))
-        if latitude is None or longitude is None:
+        """Build a destination from ``destination``, or None if missing or invalid."""
+        coordinates = _coordinates(data)
+        if coordinates is None:
             return None
-        return cls(latitude=latitude, longitude=longitude)
+        return cls(latitude=coordinates[0], longitude=coordinates[1])
 
 
 @dataclass(slots=True)
@@ -850,26 +880,27 @@ class CourierPosition:
 
     @classmethod
     def from_api(cls, data: Any) -> CourierPosition | None:
-        """Build a position from ``progress.courierPosition``, or None if incomplete."""
-        data = _as_dict(data)
-        latitude = _as_float(data.get("latitude"))
-        longitude = _as_float(data.get("longitude"))
-        if latitude is None or longitude is None:
+        """Build a position from ``progress.courierPosition``, or None if missing or invalid.
+
+        Out-of-range coordinates and the (0, 0) placeholder count as missing.
+        """
+        coordinates = _coordinates(data)
+        if coordinates is None:
             return None
         return cls(
-            latitude=latitude,
-            longitude=longitude,
-            recorded_at=parse_datetime(data.get("recordedAt")),
+            latitude=coordinates[0],
+            longitude=coordinates[1],
+            recorded_at=parse_datetime(_as_dict(data).get("recordedAt")),
         )
 
-    def distance_to(self, destination: DeliveryDestination) -> float:
-        """Straight-line (great-circle) distance to ``destination`` in metres.
+    def distance_to(self, other: GeoPoint) -> float:
+        """Straight-line (great-circle) distance to ``other`` in metres.
 
-        This is not the driving distance: the courier's route is longer.
+        ``other`` is any object with ``latitude`` and ``longitude`` (see
+        :class:`GeoPoint`). This is not the driving distance: the courier's
+        route is longer.
         """
-        return _distance_m(
-            self.latitude, self.longitude, destination.latitude, destination.longitude
-        )
+        return _distance_m(self.latitude, self.longitude, other.latitude, other.longitude)
 
 
 @dataclass(slots=True)
@@ -990,7 +1021,8 @@ class DeliveryTracking:
     def courier_position(self) -> CourierPosition | None:
         """The courier's last reported location, or None.
 
-        The shop reports it from ``ON_THE_WAY`` through ``HANDING_OVER``. Check
+        In observed data the shop reports it from ``ON_THE_WAY`` through
+        ``HANDING_OVER``; it is kept in whatever status it comes with. Check
         ``progress.courier_location_stale`` before trusting it as current.
         """
         return self.progress.courier_position if self.progress else None
@@ -1000,7 +1032,10 @@ class DeliveryTracking:
         """Straight-line distance from the courier to the destination in metres.
 
         None unless both the courier position and the destination are known.
-        This is not the driving distance: the courier's route is longer.
+        This is not the driving distance: the courier's route is longer. It
+        does not check ``progress.courier_location_stale`` or the status: a
+        stale or last-known position still gives a distance, so check those
+        yourself before showing it as current.
         """
         position = self.courier_position
         if position is None or self.destination is None:

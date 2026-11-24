@@ -354,11 +354,14 @@ several minutes old while queued and stops changing after delivery. Polling abou
 was enough to catch every status change in the observed delivery.
 
 **Courier on a map.** `DeliveryTracking.courier_position` is the courier's last reported location
-(`latitude`, `longitude`, `recorded_at`) from `ON_THE_WAY` through `HANDING_OVER`, otherwise `None`.
-`DeliveryTracking.destination` is the delivery address as coordinates, and
-`DeliveryTracking.courier_distance` the straight-line distance between the two in metres (`None`
-unless both are known). It is not the driving distance. The position only changes as often as you
-poll, and when `progress.courier_location_stale` is `True` the shop itself treats it as outdated.
+(`latitude`, `longitude`, `recorded_at`), or `None`. In observed data the shop reports it from
+`ON_THE_WAY` through `HANDING_OVER`. `DeliveryTracking.destination` is the delivery address as
+coordinates, and `DeliveryTracking.courier_distance` the straight-line distance between the two in
+metres (`None` unless both are known). It is not the driving distance. Out-of-range coordinates and
+the `(0, 0)` placeholder are treated as missing. The position only changes as often as you poll,
+and neither property checks staleness: when `progress.courier_location_stale` is `True` the shop
+itself treats the position as outdated. `CourierPosition.distance_to()` accepts any object with
+`latitude` and `longitude` (`GeoPoint`), for example your own home point.
 
 ```python
 t = await client.orders.get_delivery_tracking(order_id)
