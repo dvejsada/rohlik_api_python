@@ -756,9 +756,54 @@ class TestCourierLocation:
         assert repr(t.destination) == "DeliveryDestination()"
         assert repr(t.progress.courier_position).startswith("CourierPosition(recorded_at=")
         text = repr(t)
-        assert "50.0" not in text and "14.0" not in text
+        assert "latitude" not in text and "longitude" not in text
+        assert "destination" not in text
 
     def test_asdict_includes_the_destination(self):
         """Contract: asdict() is not redacted, so consumers must redact it."""
         dumped = dataclasses.asdict(tracking("on_the_way.json"))
         assert dumped["destination"] == {"latitude": 50.0, "longitude": 14.0}
+
+    def test_invalid_position_with_valid_destination(self):
+        data = load("on_the_way.json")
+        data["progress"]["courierPosition"] = {"latitude": 95.0, "longitude": 14.0}
+        t = DeliveryTracking.from_api(data)
+        assert t.destination is not None
+        assert t.courier_position is None
+        assert t.courier_distance is None
+
+    @pytest.mark.parametrize("recorded", ["not a date", 12345, None])
+    def test_bad_recorded_at_keeps_the_position(self, recorded):
+        data = load("on_the_way.json")
+        data["progress"]["courierPosition"]["recordedAt"] = recorded
+        position = DeliveryTracking.from_api(data).courier_position
+        assert position is not None
+        assert position.recorded_at is None
+        assert position.latitude == 50.001
+
+    @pytest.mark.parametrize(
+        "latitude, longitude",
+        [(float("nan"), 14.0), (500.0, 14.0), (50.0, -181.0), (True, 14.0), (50.0, float("inf"))],
+    )
+    def test_distance_to_rejects_an_invalid_point(self, latitude, longitude):
+        @dataclasses.dataclass
+        class Home:
+            latitude: float
+            longitude: float
+
+        here = CourierPosition(latitude=50.0, longitude=14.0, recorded_at=None)
+        with pytest.raises(ValueError):
+            here.distance_to(Home(latitude, longitude))
+        with pytest.raises(ValueError):
+            CourierPosition(latitude=latitude, longitude=longitude, recorded_at=None).distance_to(
+                Home(50.0, 14.0)
+            )
+
+    def test_distance_to_accepts_zero_zero_and_integers(self):
+        @dataclasses.dataclass
+        class Point:
+            latitude: float
+            longitude: float
+
+        here = CourierPosition(latitude=0.0, longitude=1.0, recorded_at=None)
+        assert here.distance_to(Point(0, 0)) == pytest.approx(111_195, rel=0.001)

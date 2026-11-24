@@ -823,6 +823,17 @@ def _coordinates(data: Any) -> tuple[float, float] | None:
     return latitude, longitude
 
 
+def _check_point(point: GeoPoint) -> None:
+    """Raise ValueError unless point has finite, in-range coordinates."""
+    latitude, longitude = _as_float(point.latitude), _as_float(point.longitude)
+    if (
+        latitude is None
+        or longitude is None
+        or not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0)
+    ):
+        raise ValueError("Coordinates must be finite numbers within range")
+
+
 class GeoPoint(Protocol):
     """Anything with ``latitude`` and ``longitude`` in degrees.
 
@@ -899,7 +910,13 @@ class CourierPosition:
         ``other`` is any object with ``latitude`` and ``longitude`` (see
         :class:`GeoPoint`). This is not the driving distance: the courier's
         route is longer.
+
+        Raises:
+            ValueError: If either point's coordinates are not finite numbers
+                within range (positions parsed from the API always are).
         """
+        for point in (self, other):
+            _check_point(point)
         return _distance_m(self.latitude, self.longitude, other.latitude, other.longitude)
 
 
@@ -920,8 +937,9 @@ class DeliveryProgress:
         stops_before: Stops the courier makes before this order. ``0`` means
             none; None means unknown (e.g. after delivery).
         courier_location_stale: Whether the shop flags the position as stale.
-        courier_position: The courier's location while on the way (personal
-            data, hidden from ``repr``).
+        courier_position: The courier's location, reported from ``ON_THE_WAY``
+            through ``HANDING_OVER`` in observed data (personal data, hidden
+            from ``repr``).
     """
 
     status: str | None

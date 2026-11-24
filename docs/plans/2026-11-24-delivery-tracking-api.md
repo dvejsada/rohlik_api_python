@@ -131,7 +131,7 @@ class DeliveryTracking:
 
 Left out on purpose:
 - `destination` (the customer's location; consumers know their own address, and it can be added later
-  but never removed)
+  but never removed). *0.4.0 only: parsed since 0.5.0.*
 - the phone number and photo
 - the `courierMovement` and `routeToStop` polylines
 - any `raw` field
@@ -264,7 +264,7 @@ propagates, as in every other read method.
 
 `tests/fixtures/delivery_tracking/*.json` are **written by hand** using only the keys the models read.
 Each one also has the keys that must be proven dropped (`phoneNumber`, `photoUrl`, `destination`,
-`courierMovement`, `routeToStop`). The values are constants:
+`courierMovement`, `routeToStop`; `destination` is parsed since 0.5.0). The values are constants:
 
 | Field | Value |
 | --- | --- |
