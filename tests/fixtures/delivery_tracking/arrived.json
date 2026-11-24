@@ -1,0 +1,41 @@
+{
+  "orderId": 1000000001,
+  "deliverySlot": {
+    "since": "2026-11-24T12:00:01Z",
+    "till": "2026-11-24T12:15:00Z",
+    "type": "ON_TIME"
+  },
+  "destination": {
+    "latitude": 50.0,
+    "longitude": 14.0
+  },
+  "courier": {
+    "displayName": "Courier",
+    "phoneNumber": "+420000000000",
+    "photoUrl": null
+  },
+  "earlyDelivery": {
+    "available": true,
+    "requested": true,
+    "allowedFrom": "2026-11-24T11:00:01Z"
+  },
+  "progress": {
+    "generatedAt": "2026-11-24T11:45:52.94269125Z",
+    "deliveryStatus": "ARRIVED",
+    "courierPosition": {
+      "latitude": 50.001,
+      "longitude": 14.001,
+      "recordedAt": "2026-11-24T11:40:19.886Z"
+    },
+    "courierMovement": {
+      "encodedPolyline": "x",
+      "fromRecordedAt": "2026-11-24T11:39:49.885Z",
+      "toRecordedAt": "2026-11-24T11:40:19.886Z",
+      "snapped": true
+    },
+    "routeToStop": null,
+    "courierLocationStale": false,
+    "stopsBefore": 0,
+    "estimatedArrival": "2026-11-24T11:46:18Z"
+  }
+}

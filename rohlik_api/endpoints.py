@@ -62,6 +62,11 @@ class Endpoints:
         return f"/api/v3/orders/{order_id}"
 
     @classmethod
+    def delivery_tracking(cls, order_id: int) -> str:
+        """Build the live delivery-tracking endpoint URL for an order."""
+        return f"/api/v2/orders/{int(order_id)}/delivery-tracking"
+
+    @classmethod
     def product_detail(cls, product_id: int) -> str:
         """Build product detail endpoint URL."""
         return f"/api/v1/products/{product_id}"

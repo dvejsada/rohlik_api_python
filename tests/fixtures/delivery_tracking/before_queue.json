@@ -1,0 +1,19 @@
+{
+  "orderId": 1000000001,
+  "deliverySlot": {
+    "since": "2026-11-24T12:00:01Z",
+    "till": "2026-11-24T12:15:00Z",
+    "type": "ON_TIME"
+  },
+  "destination": {
+    "latitude": 50.0,
+    "longitude": 14.0
+  },
+  "courier": null,
+  "earlyDelivery": {
+    "available": true,
+    "requested": false,
+    "allowedFrom": null
+  },
+  "progress": null
+}

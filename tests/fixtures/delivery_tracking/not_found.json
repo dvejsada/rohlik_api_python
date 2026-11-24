@@ -1,0 +1,12 @@
+{
+  "status": 404,
+  "messages": [
+    {
+      "context": "global",
+      "type": "error",
+      "content": "Not found",
+      "messageCode": "NotFound",
+      "clientLogLevel": "INFO"
+    }
+  ]
+}

@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from ..endpoints import Endpoints
+from ..errors import APIRequestFailedError
 from ..http_client import HTTP_ERRORS
+from ..models import DeliveryTracking, NextDelivery, UpcomingOrder
 from .base import BaseService
+
+TrackingOutcome = Literal["ok", "not_found", "failed"]
+
+# Request failures plus an unparseable body (Response.json raises ValueError,
+# which is not a transport error and so not part of HTTP_ERRORS).
+_READ_ERRORS: tuple[type[Exception], ...] = (*HTTP_ERRORS, ValueError)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,3 +117,96 @@ class OrderService(BaseService):
         except HTTP_ERRORS as err:
             _LOGGER.warning("Error fetching order detail for %s: %s", order_id, err)
             return None
+
+    async def get_upcoming(self) -> list[UpcomingOrder] | None:
+        """Get upcoming (not yet delivered) orders as typed models.
+
+        Typed counterpart of :meth:`get_next`, which keeps returning the raw list.
+
+        Returns:
+            list: Upcoming orders, soonest delivery slot first (empty if there
+            are none), or None if the request fails or the response is not a
+            list.
+        """
+        await self._ensure_logged_in()
+
+        try:
+            response = await self._http.get(Endpoints.NEXT_ORDER)
+            response.raise_for_status()
+            data = response.json()
+        except _READ_ERRORS as err:
+            _LOGGER.warning("Error fetching upcoming orders: %s", err)
+            return None
+        if not isinstance(data, list):
+            _LOGGER.warning("Unexpected upcoming orders response: %s", type(data).__name__)
+            return None
+        return UpcomingOrder.list_from_api(data)
+
+    async def _fetch_delivery_tracking(
+        self, order_id: int
+    ) -> tuple[TrackingOutcome, DeliveryTracking | None]:
+        """Fetch delivery tracking, telling "no tracking" (404) from a failure."""
+        await self._ensure_logged_in()
+
+        try:
+            response = await self._http.get(Endpoints.delivery_tracking(order_id))
+            if response.status == 404:
+                return "not_found", None
+            response.raise_for_status()
+            data = response.json()
+        except _READ_ERRORS as err:
+            _LOGGER.warning("Error fetching delivery tracking for %s: %s", order_id, err)
+            return "failed", None
+        if not isinstance(data, dict):
+            _LOGGER.warning(
+                "Unexpected delivery tracking response for %s: %s", order_id, type(data).__name__
+            )
+            return "failed", None
+        return "ok", DeliveryTracking.from_api(data)
+
+    async def get_delivery_tracking(self, order_id: int) -> DeliveryTracking | None:
+        """Get live delivery tracking for an order: status, ETA, stops ahead, courier.
+
+        Uses an unofficial endpoint observed on Rohlík.cz. The shop returns
+        tracking without progress until the order is queued for a courier.
+
+        Args:
+            order_id: The ID of the order.
+
+        Returns:
+            DeliveryTracking: The tracking, or None if the shop has no tracking
+            for the order (404) or the request fails. Use
+            :meth:`get_next_delivery` to tell the two apart.
+        """
+        _outcome, tracking = await self._fetch_delivery_tracking(order_id)
+        return tracking
+
+    async def get_next_delivery(self) -> NextDelivery | None:
+        """Get the soonest upcoming order with its tracking and resolved ETA.
+
+        Makes two requests (upcoming orders, then tracking for the soonest one)
+        and combines them with :meth:`NextDelivery.resolve`. Consumers that
+        already hold the upcoming list and tracking can call ``resolve``
+        directly.
+
+        Unlike most read methods this raises on a failed request, so that a
+        failure is never mistaken for "no upcoming order" or "no tracking".
+
+        Returns:
+            NextDelivery: The soonest order with its ETA, or None if there is no
+            upcoming order.
+
+        Raises:
+            APIRequestFailedError: If the upcoming orders or the tracking
+                request fails.
+        """
+        orders = await self.get_upcoming()
+        if orders is None:
+            raise APIRequestFailedError("Cannot fetch upcoming orders")
+        if not orders:
+            return None
+        order = orders[0]
+        outcome, tracking = await self._fetch_delivery_tracking(order.id)
+        if outcome == "failed":
+            raise APIRequestFailedError(f"Cannot fetch delivery tracking for order {order.id}")
+        return NextDelivery.resolve(order, tracking)

@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1000000001,
+    "itemsCount": 17,
+    "itemsTotalQuantity": 29,
+    "priceComposition": {
+      "total": {
+        "amount": 1097.64,
+        "currency": "CZK"
+      }
+    },
+    "orderTime": "2026-11-24T07:01:02.000+0100",
+    "deliverySlot": {
+      "id": 1000001,
+      "type": "ON_TIME",
+      "since": "2026-11-24T13:00:01.000+0100",
+      "till": "2026-11-24T13:15:00.000+0100"
+    },
+    "pblLink": null,
+    "invoiceAwaitingPayment": null,
+    "address": "Example Street 1, 00000 City",
+    "payment": 1,
+    "itemImages": [
+      {
+        "productId": 1,
+        "image": "https://example.invalid/1.jpg"
+      }
+    ],
+    "availableActions": [
+      "NOTE_CHANGE"
+    ],
+    "expressDeliveryPromise": null
+  },
+  {
+    "id": 1000000002,
+    "itemsCount": 17,
+    "itemsTotalQuantity": 29,
+    "priceComposition": {
+      "total": {
+        "amount": 1097.64,
+        "currency": "CZK"
+      }
+    },
+    "orderTime": "2026-11-24T07:01:02.000+0100",
+    "deliverySlot": {
+      "id": 1000001,
+      "type": "ON_TIME",
+      "since": "2026-11-24T11:30:00.000Z",
+      "till": "2026-11-24T11:45:00.000Z"
+    },
+    "pblLink": null,
+    "invoiceAwaitingPayment": null,
+    "address": "Example Street 1, 00000 City",
+    "payment": 1,
+    "itemImages": [
+      {
+        "productId": 1,
+        "image": "https://example.invalid/1.jpg"
+      }
+    ],
+    "availableActions": [
+      "NOTE_CHANGE"
+    ],
+    "expressDeliveryPromise": null
+  }
+]
