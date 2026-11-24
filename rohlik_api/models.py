@@ -15,10 +15,13 @@ on Knuspr.de, see :data:`~rohlik_api.SITES`).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
-from typing import Any
+from datetime import datetime
+from enum import StrEnum
+from typing import Any, Literal
 
-from .helpers import format_price
+from .helpers import format_price, parse_datetime
 
 # ---------------------------------------------------------------------------
 # Cart
@@ -729,4 +732,377 @@ class ShoppingList:
         return cls(
             name=data.get("name"),
             products_in_list=data.get("products", []),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Delivery tracking
+# ---------------------------------------------------------------------------
+#
+# Parsed from the unofficial ``/api/v2/orders/{id}/delivery-tracking`` endpoint
+# and ``/api/v3/orders/upcoming``. Parsing never raises: a missing level or a
+# value of the wrong type becomes ``None``.
+
+
+def _as_int(value: Any) -> int | None:
+    """Return value if it is an int (bool excluded), else None."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _as_float(value: Any) -> float | None:
+    """Return value as a finite float if it is a real number (bool excluded), else None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        result = float(value)
+    except OverflowError:
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _as_bool(value: Any) -> bool | None:
+    """Return value if it is a bool, else None."""
+    return value if isinstance(value, bool) else None
+
+
+def _as_str(value: Any) -> str | None:
+    """Return value if it is a non-empty string, else None."""
+    return value if isinstance(value, str) and value else None
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Return value if it is a dict, else an empty dict."""
+    return value if isinstance(value, dict) else {}
+
+
+class TrackingStatus(StrEnum):
+    """Delivery statuses observed in ``progress.deliveryStatus``, in lifecycle order.
+
+    Models keep the raw string, so a value not listed here is preserved as-is.
+    """
+
+    IN_QUEUE = "IN_QUEUE"
+    ON_THE_WAY = "ON_THE_WAY"
+    ARRIVED = "ARRIVED"
+    HANDING_OVER = "HANDING_OVER"
+    DELIVERED = "DELIVERED"
+
+
+DeliveryEtaSource = Literal["tracking", "slot"]
+"""Where :attr:`NextDelivery.eta` came from."""
+
+
+@dataclass(slots=True)
+class CourierPosition:
+    """The courier's last reported location.
+
+    This is personal data (a third party's location): do not log or expose it
+    without redaction.
+
+    Attributes:
+        latitude: Latitude in degrees.
+        longitude: Longitude in degrees.
+        recorded_at: When the position was recorded (aware), or None.
+    """
+
+    latitude: float = field(repr=False)
+    longitude: float = field(repr=False)
+    recorded_at: datetime | None
+
+    @classmethod
+    def from_api(cls, data: Any) -> CourierPosition | None:
+        """Build a position from ``progress.courierPosition``, or None if incomplete."""
+        data = _as_dict(data)
+        latitude = _as_float(data.get("latitude"))
+        longitude = _as_float(data.get("longitude"))
+        if latitude is None or longitude is None:
+            return None
+        return cls(
+            latitude=latitude,
+            longitude=longitude,
+            recorded_at=parse_datetime(data.get("recordedAt")),
+        )
+
+
+@dataclass(slots=True)
+class DeliveryProgress:
+    """The live part of delivery tracking (the response's ``progress`` object).
+
+    The shop returns no progress until the order is queued for a courier.
+
+    Attributes:
+        status: Raw ``deliveryStatus``; see :class:`TrackingStatus` for known values.
+        generated_at: When the shop generated this snapshot. It can be several
+            minutes old and stops changing after delivery, so it is not the time
+            of the request.
+        estimated_arrival: The courier's estimated arrival (aware, UTC). It can
+            be None early in the queue. After delivery it keeps the last
+            estimate, which is not the actual arrival time.
+        stops_before: Stops the courier makes before this order. ``0`` means
+            none; None means unknown (e.g. after delivery).
+        courier_location_stale: Whether the shop flags the position as stale.
+        courier_position: The courier's location while on the way (personal
+            data, hidden from ``repr``).
+    """
+
+    status: str | None
+    generated_at: datetime | None
+    estimated_arrival: datetime | None
+    stops_before: int | None
+    courier_location_stale: bool | None
+    courier_position: CourierPosition | None = field(default=None, repr=False)
+
+    @classmethod
+    def from_api(cls, data: Any) -> DeliveryProgress | None:
+        """Build progress from the ``progress`` object, or None if it is absent."""
+        if not isinstance(data, dict):
+            return None
+        return cls(
+            status=_as_str(data.get("deliveryStatus")),
+            generated_at=parse_datetime(data.get("generatedAt")),
+            estimated_arrival=parse_datetime(data.get("estimatedArrival")),
+            stops_before=_as_int(data.get("stopsBefore")),
+            courier_location_stale=_as_bool(data.get("courierLocationStale")),
+            courier_position=CourierPosition.from_api(data.get("courierPosition")),
+        )
+
+
+@dataclass(slots=True)
+class DeliveryTracking:
+    """Live tracking of one order's delivery.
+
+    Attributes:
+        order_id: The tracked order's ID.
+        slot_since: Start of the booked delivery slot (aware).
+        slot_till: End of the booked delivery slot (aware).
+        slot_type: Slot type, e.g. ``"ON_TIME"``.
+        early_delivery_available: Whether the customer may allow early delivery.
+        early_delivery_requested: Whether the customer allowed early delivery.
+        early_delivery_allowed_from: Earliest delivery time once early delivery
+            is allowed (aware), or None.
+        progress: The live state, or None before the order is queued.
+        courier_name: The courier's display name (a first name in observed
+            data), or None until the order is queued. Personal data, hidden
+            from ``repr``.
+    """
+
+    order_id: int | None
+    slot_since: datetime | None
+    slot_till: datetime | None
+    slot_type: str | None
+    early_delivery_available: bool | None
+    early_delivery_requested: bool | None
+    early_delivery_allowed_from: datetime | None
+    progress: DeliveryProgress | None
+    courier_name: str | None = field(default=None, repr=False)
+
+    @classmethod
+    def from_api(cls, data: Any) -> DeliveryTracking:
+        """Build tracking from a delivery-tracking response.
+
+        The courier's phone number and photo, the delivery destination and the
+        route/movement polylines are deliberately not kept.
+        """
+        data = _as_dict(data)
+        slot = _as_dict(data.get("deliverySlot"))
+        early = _as_dict(data.get("earlyDelivery"))
+        courier = _as_dict(data.get("courier"))
+        return cls(
+            order_id=_as_int(data.get("orderId")),
+            slot_since=parse_datetime(slot.get("since")),
+            slot_till=parse_datetime(slot.get("till")),
+            slot_type=_as_str(slot.get("type")),
+            early_delivery_available=_as_bool(early.get("available")),
+            early_delivery_requested=_as_bool(early.get("requested")),
+            early_delivery_allowed_from=parse_datetime(early.get("allowedFrom")),
+            progress=DeliveryProgress.from_api(data.get("progress")),
+            courier_name=_as_str(courier.get("displayName")),
+        )
+
+    @property
+    def status(self) -> str | None:
+        """The raw delivery status, or None before the order is queued."""
+        return self.progress.status if self.progress else None
+
+    @property
+    def estimated_arrival(self) -> datetime | None:
+        """The courier's estimated arrival as served (uncapped), or None."""
+        return self.progress.estimated_arrival if self.progress else None
+
+    @property
+    def stops_before(self) -> int | None:
+        """Stops the courier makes before this order, or None."""
+        return self.progress.stops_before if self.progress else None
+
+    @property
+    def is_active(self) -> bool:
+        """Whether a delivery is in progress.
+
+        True for any status other than ``DELIVERED``, including values not in
+        :class:`TrackingStatus`, so a new status never hides a live delivery.
+        """
+        status = self.status
+        return status is not None and status != TrackingStatus.DELIVERED
+
+    @property
+    def has_arrived(self) -> bool:
+        """Whether the courier is at the destination (``ARRIVED``/``HANDING_OVER``)."""
+        return self.status in (TrackingStatus.ARRIVED, TrackingStatus.HANDING_OVER)
+
+    @property
+    def is_delivered(self) -> bool:
+        """Whether the order has been delivered."""
+        return self.status == TrackingStatus.DELIVERED
+
+    @property
+    def arrival_floor(self) -> datetime | None:
+        """The earliest time the shop lets the courier arrive.
+
+        ``early_delivery_allowed_from`` once early delivery is allowed,
+        otherwise the slot start; None if unknown.
+        """
+        if self.early_delivery_requested and self.early_delivery_allowed_from is not None:
+            return self.early_delivery_allowed_from
+        return self.slot_since
+
+
+@dataclass(slots=True)
+class UpcomingOrder:
+    """An order that has not been delivered yet.
+
+    Attributes:
+        id: The order ID.
+        slot_id: The booked delivery slot's ID.
+        slot_type: Slot type, e.g. ``"ON_TIME"``.
+        slot_since: Start of the delivery slot (aware).
+        slot_till: End of the delivery slot (aware).
+        order_time: When the order was placed (aware).
+        items_count: Number of order lines.
+        items_total_quantity: Total number of units across all lines.
+        total_price: Order total, in :attr:`currency`.
+        currency: ISO 4217 currency code, e.g. ``"CZK"``.
+        available_actions: Actions the shop offers, e.g. ``["NOTE_CHANGE"]``.
+    """
+
+    id: int
+    slot_id: int | None
+    slot_type: str | None
+    slot_since: datetime | None
+    slot_till: datetime | None
+    order_time: datetime | None
+    items_count: int | None
+    items_total_quantity: int | None
+    total_price: float | None
+    currency: str | None
+    available_actions: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_api(cls, data: Any) -> UpcomingOrder | None:
+        """Build an order from an upcoming-orders entry, or None without an ID.
+
+        The delivery address, payment details and item images are not kept.
+        """
+        data = _as_dict(data)
+        order_id = _as_int(data.get("id"))
+        if order_id is None:
+            return None
+        slot = _as_dict(data.get("deliverySlot"))
+        total = _as_dict(_as_dict(data.get("priceComposition")).get("total"))
+        actions = data.get("availableActions")
+        return cls(
+            id=order_id,
+            slot_id=_as_int(slot.get("id")),
+            slot_type=_as_str(slot.get("type")),
+            slot_since=parse_datetime(slot.get("since")),
+            slot_till=parse_datetime(slot.get("till")),
+            order_time=parse_datetime(data.get("orderTime")),
+            items_count=_as_int(data.get("itemsCount")),
+            items_total_quantity=_as_int(data.get("itemsTotalQuantity")),
+            total_price=_as_float(total.get("amount")),
+            currency=_as_str(total.get("currency")),
+            available_actions=(
+                [a for a in actions if isinstance(a, str)] if isinstance(actions, list) else []
+            ),
+        )
+
+    @classmethod
+    def list_from_api(cls, data: Any) -> list[UpcomingOrder]:
+        """Parse a raw upcoming-orders list, soonest delivery slot first.
+
+        Accepts the response of ``/api/v3/orders/upcoming`` (for example
+        ``RohlikAPI.get_data()["next_order"]``). Entries without an ID are
+        skipped; orders without a slot are sorted last. A non-list gives ``[]``.
+        """
+        if not isinstance(data, list):
+            return []
+        orders = [order for order in map(cls.from_api, data) if order is not None]
+        return sorted(
+            orders,
+            key=lambda o: (o.slot_since is None, o.slot_since.timestamp() if o.slot_since else 0),
+        )
+
+
+@dataclass(slots=True)
+class NextDelivery:
+    """The soonest upcoming order with its tracking and resolved ETA.
+
+    Attributes:
+        order: The soonest upcoming order.
+        tracking: Its delivery tracking, or None if the shop has none for it.
+        eta: The best estimate of the arrival time (aware), or None.
+        eta_source: ``"tracking"`` (courier estimate) or ``"slot"`` (booked
+            slot start), or None without an ETA.
+        eta_capped: True when the courier estimate was earlier than the shop
+            allows delivery and :attr:`eta` was raised to that limit.
+        status: The tracking status, or None without tracking progress.
+    """
+
+    order: UpcomingOrder
+    tracking: DeliveryTracking | None
+    eta: datetime | None
+    eta_source: DeliveryEtaSource | None
+    eta_capped: bool
+    status: str | None
+
+    @classmethod
+    def resolve(cls, order: UpcomingOrder, tracking: DeliveryTracking | None) -> NextDelivery:
+        """Combine an order and its tracking into a :class:`NextDelivery` (no I/O).
+
+        ETA rule (a heuristic based on one observed delivery): use the courier
+        estimate; while the order is still ``IN_QUEUE``, never report it earlier
+        than :attr:`DeliveryTracking.arrival_floor`, because the shop does not
+        deliver before the slot start unless early delivery was allowed. Once
+        the courier is on the way the estimate is used as served, so the ETA
+        can move earlier at that moment (``eta_capped`` turns False). Without
+        an estimate, fall back to the slot start (the order's, else the
+        tracking's). The uncapped estimate stays available as
+        ``tracking.estimated_arrival``.
+
+        Raises:
+            ValueError: If ``tracking`` belongs to a different order.
+        """
+        if tracking is not None and tracking.order_id is not None and tracking.order_id != order.id:
+            raise ValueError(f"Tracking is for order {tracking.order_id}, not for order {order.id}")
+        estimate = tracking.estimated_arrival if tracking else None
+        slot_since = order.slot_since or (tracking.slot_since if tracking else None)
+        eta: datetime | None
+        source: DeliveryEtaSource | None
+        capped = False
+        if tracking is not None and estimate is not None:
+            eta, source = estimate, "tracking"
+            floor = tracking.arrival_floor
+            queued = tracking.status == TrackingStatus.IN_QUEUE
+            if queued and floor is not None and estimate < floor:
+                eta, capped = floor, True
+        elif slot_since is not None:
+            eta, source = slot_since, "slot"
+        else:
+            eta, source = None, None
+        return cls(
+            order=order,
+            tracking=tracking,
+            eta=eta,
+            eta_source=source,
+            eta_capped=capped,
+            status=tracking.status if tracking else None,
         )

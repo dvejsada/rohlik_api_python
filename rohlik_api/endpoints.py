@@ -62,6 +62,22 @@ class Endpoints:
         return f"/api/v3/orders/{order_id}"
 
     @classmethod
+    def delivery_tracking(cls, order_id: int) -> str:
+        """Build the live delivery-tracking endpoint URL for an order.
+
+        Raises:
+            TypeError: If ``order_id`` is not an int or a string of digits.
+            ValueError: If ``order_id`` is negative or a non-digit string.
+        """
+        if isinstance(order_id, str) and order_id.isdigit():
+            order_id = int(order_id)
+        if isinstance(order_id, bool) or not isinstance(order_id, int):
+            raise TypeError(f"order_id must be an int, not {type(order_id).__name__}")
+        if order_id < 0:
+            raise ValueError("order_id must not be negative")
+        return f"/api/v2/orders/{order_id}/delivery-tracking"
+
+    @classmethod
     def product_detail(cls, product_id: int) -> str:
         """Build product detail endpoint URL."""
         return f"/api/v1/products/{product_id}"
