@@ -28,6 +28,7 @@ recipes (Rohlík Chef), and read your orders and deliveries, all from Python.
 - [Typed models](#typed-models)
 - [Services](#services)
 - [API reference](#api-reference)
+- [Tracking a delivery](#tracking-a-delivery)
 - [Error handling](#error-handling)
 - [Advanced usage](#advanced-usage)
 - [Development](#development)
@@ -43,6 +44,7 @@ recipes (Rohlík Chef), and read your orders and deliveries, all from Python.
 - 🔄 Works as an async context manager
 - 🍳 Recipe search and ingredient shopping (Rohlík Chef)
 - 📦 Product details, composition/nutrition, prices, and AI summaries
+- 🚚 Live delivery tracking: status, courier ETA, stops ahead and courier position
 - 🌍 Works with every Rohlík Group shop: Rohlík.cz, Knuspr.de, Gurkerl.at, Kifli.hu and Sezamo.ro
   ([other shops](#other-shops))
 
@@ -136,7 +138,7 @@ cart.products[0].name                    # str
 asdict(cart)
 ```
 
-Raw passthrough endpoints (`orders.*`, `delivery.*`, `account.get_premium_profile`,
+Raw passthrough endpoints (`orders.*` apart from the delivery-tracking methods, `delivery.*`, `account.get_premium_profile`,
 `account.get_bags_info`, `account.get_announcements`, and `get_data`) return the
 decoded JSON as `dict` / `list`, since they are not reshaped by the client.
 
@@ -217,7 +219,18 @@ last_order = await client.orders.get_last()                       # last deliver
 orders = await client.orders.get_delivered(limit=50, offset=0)    # one history page
 all_orders = await client.orders.get_all_delivered()              # every page, paginated
 detail = await client.orders.get_detail(order_id=12345678)        # full order incl. items
+
+# Typed upcoming orders, soonest slot first -> list[UpcomingOrder] | None
+upcoming = await client.orders.get_upcoming()
+
+# Live delivery tracking for one order -> DeliveryTracking | None
+tracking = await client.orders.get_delivery_tracking(order_id=12345678)
+
+# Soonest upcoming order + its tracking + resolved ETA -> NextDelivery | None (raises on failure)
+nxt = await client.orders.get_next_delivery()
 ```
+
+See [Tracking a delivery](#tracking-a-delivery) for what these return.
 
 ### Delivery service (`client.delivery`)
 
@@ -265,6 +278,71 @@ products = await client.recipes.get_ingredient_products(ingredient_ids=[102, 56]
 # Fetch delivery, orders, cart, premium profile, announcements, etc. in one call
 all_data = await client.get_data()
 ```
+
+## Tracking a delivery
+
+> [!NOTE]
+> Delivery tracking uses an unofficial endpoint (`/api/v2/orders/{id}/delivery-tracking`)
+> verified on Rohlík.cz during a single delivery. Other shops may not offer it (the methods then
+> return `None`). Behaviour for delayed or cancelled orders, several concurrent orders, express
+> slots, and deliveries without an early-delivery request has not been observed yet.
+
+```python
+from rohlik_api import TrackingStatus
+
+nxt = await client.orders.get_next_delivery()
+if nxt is None:
+    print("No upcoming order")
+else:
+    print(nxt.order.id, nxt.order.slot_since, nxt.order.items_total_quantity)
+    print(nxt.status)                    # "IN_QUEUE", "ON_THE_WAY", "ARRIVED", ... or None
+    print(nxt.eta, nxt.eta_source)       # aware datetime, "tracking" or "slot"
+    if nxt.tracking:
+        print(nxt.tracking.stops_before)       # stops before yours; 0 = you are next
+        print(nxt.tracking.estimated_arrival)  # the courier estimate, uncapped
+        if nxt.tracking.has_arrived:           # ARRIVED / HANDING_OVER
+            print("The courier is at the door")
+```
+
+**Lifecycle.** `progress` (and so `status`) is `None` until the order is queued for a courier.
+Then the status moves `IN_QUEUE` → `ON_THE_WAY` → `ARRIVED` → `HANDING_OVER` → `DELIVERED`
+(see `TrackingStatus`; unknown values are kept as strings and count as active).
+`estimated_arrival` can be missing early in the queue and keeps its last value after delivery,
+so it is not the actual arrival time. `stops_before` is `0` when the courier is heading to you
+and `None` once delivered. The courier position is reported while on the way.
+
+**ETA rule.** `NextDelivery.eta` is the courier estimate, except that while the order is still
+`IN_QUEUE` it is never earlier than `DeliveryTracking.arrival_floor`. That is the slot start, or the
+early-delivery start if the customer allowed early delivery, matching what the shop itself
+shows. `eta_capped` tells when that happened. Once the courier is on the way the estimate is used
+as served. Without an estimate the slot start is used (`eta_source == "slot"`). This rule is a
+heuristic based on observed deliveries.
+
+If you already have the raw upcoming-orders list (for example `get_data()["next_order"]`) and a
+tracking result, apply the same rule without extra requests:
+
+```python
+from rohlik_api import NextDelivery, UpcomingOrder
+
+orders = UpcomingOrder.list_from_api(data["next_order"])
+if orders:
+    tracking = await client.orders.get_delivery_tracking(orders[0].id)
+    nxt = NextDelivery.resolve(orders[0], tracking)
+```
+
+**Errors.** `get_delivery_tracking` and `get_upcoming` follow the usual read convention and return
+`None` on failure (a 404, meaning the order has no tracking, is not logged as a warning). `get_next_delivery`
+instead **raises** `APIRequestFailedError` when either request fails, so that a failure is never
+mistaken for "no upcoming order"; it returns `None` only when there is no upcoming order.
+
+**Freshness.** `DeliveryProgress.generated_at` is when the shop generated the snapshot. It can be
+several minutes old while queued and stops changing after delivery. Polling about once a minute
+was enough to catch every status change in observed deliveries.
+
+**Personal data.** `DeliveryTracking.courier_name` and `DeliveryProgress.courier_position` are a
+courier's personal data. They are hidden from the models' `repr`, but `dataclasses.asdict` includes
+them, so redact them before logging or sharing. The courier's phone number, photo, the delivery
+destination and route geometry are not parsed at all.
 
 ## Error handling
 
