@@ -283,8 +283,8 @@ all_data = await client.get_data()
 
 > [!NOTE]
 > Delivery tracking uses an unofficial endpoint (`/api/v2/orders/{id}/delivery-tracking`)
-> verified on Rohlík.cz during a single delivery. Other shops may not offer it (the methods then
-> return `None`). Behaviour for delayed or cancelled orders, several concurrent orders, express
+> verified on Rohlík.cz during a single delivery. Other shops may not offer it: there
+> `get_delivery_tracking` returns `None` and `get_next_delivery` falls back to the slot start. Behaviour for delayed or cancelled orders, several concurrent orders, express
 > slots, and deliveries without an early-delivery request has not been observed yet.
 
 ```python
@@ -309,14 +309,20 @@ Then the status moves `IN_QUEUE` → `ON_THE_WAY` → `ARRIVED` → `HANDING_OVE
 (see `TrackingStatus`; unknown values are kept as strings and count as active).
 `estimated_arrival` can be missing early in the queue and keeps its last value after delivery,
 so it is not the actual arrival time. `stops_before` is `0` when the courier is heading to you
-and `None` once delivered. The courier position is reported while on the way.
+and `None` once delivered. The courier position is reported from `ON_THE_WAY` through
+`HANDING_OVER`.
+
+The shop removes an order from the upcoming list within about a second of delivery, so
+`get_next_delivery()` rarely reports `DELIVERED`: it returns `None` (or the next order). To observe
+the final state, keep polling `get_delivery_tracking(order_id)` for the order you were tracking.
 
 **ETA rule.** `NextDelivery.eta` is the courier estimate, except that while the order is still
 `IN_QUEUE` it is never earlier than `DeliveryTracking.arrival_floor`. That is the slot start, or the
 early-delivery start if the customer allowed early delivery, matching what the shop itself
 shows. `eta_capped` tells when that happened. Once the courier is on the way the estimate is used
-as served. Without an estimate the slot start is used (`eta_source == "slot"`). This rule is a
-heuristic based on observed deliveries.
+as served, so the ETA can move earlier at that moment (`eta_capped` turns `False`). Without an
+estimate the slot start is used (`eta_source == "slot"`). This rule is a heuristic based on one
+observed delivery.
 
 If you already have the raw upcoming-orders list (for example `get_data()["next_order"]`) and a
 tracking result, apply the same rule without extra requests:
@@ -324,20 +330,23 @@ tracking result, apply the same rule without extra requests:
 ```python
 from rohlik_api import NextDelivery, UpcomingOrder
 
-orders = UpcomingOrder.list_from_api(data["next_order"])
-if orders:
-    tracking = await client.orders.get_delivery_tracking(orders[0].id)
+raw = data["next_order"]          # None if that request failed: keep your previous state
+if raw is not None and (orders := UpcomingOrder.list_from_api(raw)):
+    # raise_on_error=True: None then means only "no tracking for this order" (404)
+    tracking = await client.orders.get_delivery_tracking(orders[0].id, raise_on_error=True)
     nxt = NextDelivery.resolve(orders[0], tracking)
 ```
 
 **Errors.** `get_delivery_tracking` and `get_upcoming` follow the usual read convention and return
-`None` on failure (a 404, meaning the order has no tracking, is not logged as a warning). `get_next_delivery`
-instead **raises** `APIRequestFailedError` when either request fails, so that a failure is never
-mistaken for "no upcoming order"; it returns `None` only when there is no upcoming order.
+`None` on failure (a 404, meaning the order has no tracking, is not logged as a warning). Pass
+`raise_on_error=True` to `get_delivery_tracking` to get `APIRequestFailedError` on a failure
+instead, so that `None` means only "no tracking". `get_next_delivery` always **raises** when either
+request fails, so that a failure is never mistaken for "no upcoming order"; it returns `None` only
+when there is no upcoming order.
 
 **Freshness.** `DeliveryProgress.generated_at` is when the shop generated the snapshot. It can be
 several minutes old while queued and stops changing after delivery. Polling about once a minute
-was enough to catch every status change in observed deliveries.
+was enough to catch every status change in the observed delivery.
 
 **Personal data.** `DeliveryTracking.courier_name` and `DeliveryProgress.courier_position` are a
 courier's personal data. They are hidden from the models' `repr`, but `dataclasses.asdict` includes

@@ -15,6 +15,7 @@ on Knuspr.de, see :data:`~rohlik_api.SITES`).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -749,10 +750,14 @@ def _as_int(value: Any) -> int | None:
 
 
 def _as_float(value: Any) -> float | None:
-    """Return value as float if it is a real number (bool excluded), else None."""
+    """Return value as a finite float if it is a real number (bool excluded), else None."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    try:
+        result = float(value)
+    except OverflowError:
+        return None
+    return result if math.isfinite(result) else None
 
 
 def _as_bool(value: Any) -> bool | None:
@@ -800,8 +805,8 @@ class CourierPosition:
         recorded_at: When the position was recorded (aware), or None.
     """
 
-    latitude: float
-    longitude: float
+    latitude: float = field(repr=False)
+    longitude: float = field(repr=False)
     recorded_at: datetime | None
 
     @classmethod
@@ -1063,15 +1068,23 @@ class NextDelivery:
     def resolve(cls, order: UpcomingOrder, tracking: DeliveryTracking | None) -> NextDelivery:
         """Combine an order and its tracking into a :class:`NextDelivery` (no I/O).
 
-        ETA rule (a heuristic based on observed deliveries): use the courier
+        ETA rule (a heuristic based on one observed delivery): use the courier
         estimate; while the order is still ``IN_QUEUE``, never report it earlier
         than :attr:`DeliveryTracking.arrival_floor`, because the shop does not
         deliver before the slot start unless early delivery was allowed. Once
-        the courier is on the way the estimate is used as served. Without an
-        estimate, fall back to the slot start. The uncapped estimate stays
-        available as ``tracking.estimated_arrival``.
+        the courier is on the way the estimate is used as served, so the ETA
+        can move earlier at that moment (``eta_capped`` turns False). Without
+        an estimate, fall back to the slot start (the order's, else the
+        tracking's). The uncapped estimate stays available as
+        ``tracking.estimated_arrival``.
+
+        Raises:
+            ValueError: If ``tracking`` belongs to a different order.
         """
+        if tracking is not None and tracking.order_id is not None and tracking.order_id != order.id:
+            raise ValueError(f"Tracking is for order {tracking.order_id}, not for order {order.id}")
         estimate = tracking.estimated_arrival if tracking else None
+        slot_since = order.slot_since or (tracking.slot_since if tracking else None)
         eta: datetime | None
         source: DeliveryEtaSource | None
         capped = False
@@ -1081,8 +1094,8 @@ class NextDelivery:
             queued = tracking.status == TrackingStatus.IN_QUEUE
             if queued and floor is not None and estimate < floor:
                 eta, capped = floor, True
-        elif order.slot_since is not None:
-            eta, source = order.slot_since, "slot"
+        elif slot_since is not None:
+            eta, source = slot_since, "slot"
         else:
             eta, source = None, None
         return cls(

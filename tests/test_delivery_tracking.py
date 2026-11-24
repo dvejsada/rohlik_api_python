@@ -456,3 +456,130 @@ class TestGetNextDelivery:
 def test_endpoint_builder_coerces_to_int():
     assert Endpoints.delivery_tracking(42) == "/api/v2/orders/42/delivery-tracking"
     assert Endpoints.delivery_tracking("42") == "/api/v2/orders/42/delivery-tracking"
+
+
+# ---------------------------------------------------------------------------
+# Review follow-ups
+# ---------------------------------------------------------------------------
+
+
+class TestStrictParsing:
+    @pytest.mark.parametrize("value", [10**400, float("nan"), float("inf"), -float("inf")])
+    def test_non_finite_coordinates_are_dropped(self, value):
+        data = load("on_the_way.json")
+        data["progress"]["courierPosition"]["latitude"] = value
+        assert DeliveryTracking.from_api(data).progress.courier_position is None
+
+    def test_huge_price_does_not_raise(self):
+        entry = load("upcoming_one.json")[0]
+        entry["priceComposition"]["total"]["amount"] = 10**400
+        assert UpcomingOrder.from_api(entry).total_price is None
+
+    @pytest.mark.parametrize("value", ["true", 1, None])
+    def test_non_bool_flags_become_none(self, value):
+        data = load("on_the_way.json")
+        data["earlyDelivery"]["available"] = value
+        data["earlyDelivery"]["requested"] = value
+        data["progress"]["courierLocationStale"] = value
+        t = DeliveryTracking.from_api(data)
+        assert t.early_delivery_available is None
+        assert t.early_delivery_requested is None
+        assert t.progress.courier_location_stale is None
+
+    def test_non_numeric_price_and_odd_actions(self):
+        entry = load("upcoming_one.json")[0]
+        entry["priceComposition"]["total"]["amount"] = "1097.64"
+        entry["availableActions"] = ["NOTE_CHANGE", 3, None, "REPEAT_ORDER"]
+        order = UpcomingOrder.from_api(entry)
+        assert order.total_price is None
+        assert order.available_actions == ["NOTE_CHANGE", "REPEAT_ORDER"]
+
+    def test_upcoming_slot_till(self):
+        assert upcoming_order().slot_till == datetime(2026, 11, 24, 12, 15, tzinfo=UTC)
+
+    def test_courier_position_repr_hides_coordinates(self):
+        position = tracking("on_the_way.json").progress.courier_position
+        assert "50.001" not in repr(position) and "14.001" not in repr(position)
+
+    def test_allowed_from_ignored_when_not_requested(self):
+        data = load("in_queue_eta.json")
+        data["earlyDelivery"] = {
+            "available": True,
+            "requested": False,
+            "allowedFrom": "2026-11-24T11:00:01Z",
+        }
+        assert DeliveryTracking.from_api(data).arrival_floor == SLOT_SINCE
+
+
+class TestSortingByInstant:
+    def test_sorts_by_absolute_time_not_wall_clock(self):
+        # 12:15+01:00 is 11:15Z, i.e. before 11:30Z, although "12:15" > "11:30" on the wall.
+        first, second = load("upcoming_two.json")
+        first["deliverySlot"]["since"] = "2026-11-24T12:15:00.000+0100"
+        orders = UpcomingOrder.list_from_api([second, first])
+        assert [o.id for o in orders] == [1000000001, 1000000002]
+
+
+class TestResolveConsistency:
+    def test_tracking_for_another_order_is_rejected(self):
+        data = load("in_queue_eta.json")
+        data["orderId"] = 1000000002
+        with pytest.raises(ValueError):
+            NextDelivery.resolve(upcoming_order(), DeliveryTracking.from_api(data))
+
+    def test_slot_fallback_uses_tracking_slot_when_order_has_none(self):
+        entry = load("upcoming_one.json")[0]
+        del entry["deliverySlot"]
+        result = NextDelivery.resolve(
+            UpcomingOrder.from_api(entry), tracking("in_queue_no_eta.json")
+        )
+        assert result.eta == SLOT_SINCE
+        assert result.eta_source == "slot"
+
+    def test_eta_moves_earlier_when_courier_sets_off_without_early_delivery(self):
+        # Documented behaviour: the floor is lifted at ON_THE_WAY, so the ETA can drop.
+        queued = NextDelivery.resolve(upcoming_order(), tracking("in_queue_eta.json"))
+        data = load("on_the_way.json")
+        data["earlyDelivery"] = {"available": True, "requested": False, "allowedFrom": None}
+        on_the_way = NextDelivery.resolve(upcoming_order(), DeliveryTracking.from_api(data))
+        assert queued.eta_capped and not on_the_way.eta_capped
+        assert on_the_way.eta < queued.eta
+
+
+class TestServiceFollowUps:
+    async def test_raise_on_error(self, mock_http, mock_auth):
+        mock_http.get.return_value = response(status=502)
+        with pytest.raises(APIRequestFailedError):
+            await OrderService(mock_http, mock_auth).get_delivery_tracking(1, raise_on_error=True)
+
+    async def test_raise_on_error_still_returns_none_on_404(self, mock_http, mock_auth):
+        mock_http.get.return_value = response(load("not_found.json"), status=404)
+        service = OrderService(mock_http, mock_auth)
+        assert await service.get_delivery_tracking(1, raise_on_error=True) is None
+
+    @pytest.mark.parametrize("order_id", ["abc", None])
+    async def test_invalid_order_id_raises(self, mock_http, mock_auth, order_id):
+        with pytest.raises((TypeError, ValueError)):
+            await OrderService(mock_http, mock_auth).get_delivery_tracking(order_id)
+        mock_http.get.assert_not_called()
+
+    async def test_invalid_json_logs_warning(self, mock_http, mock_auth, caplog):
+        mock_http.get.return_value = response(json_error=ValueError("bad"))
+        with caplog.at_level(logging.WARNING):
+            await OrderService(mock_http, mock_auth).get_delivery_tracking(1)
+        assert any("delivery tracking" in r.getMessage() for r in caplog.records)
+
+    async def test_next_delivery_non_dict_tracking_raises(self, mock_http, mock_auth):
+        mock_http.get.side_effect = [response(load("upcoming_one.json")), response([])]
+        with pytest.raises(APIRequestFailedError):
+            await OrderService(mock_http, mock_auth).get_next_delivery()
+
+    async def test_next_delivery_auth_failure_propagates(self, mock_http, mock_auth):
+        mock_auth.ensure_logged_in.side_effect = InvalidCredentialsError("bad credentials")
+        with pytest.raises(InvalidCredentialsError):
+            await OrderService(mock_http, mock_auth).get_next_delivery()
+
+    async def test_get_upcoming_logs_in(self, mock_http, mock_auth):
+        mock_http.get.return_value = response([])
+        await OrderService(mock_http, mock_auth).get_upcoming()
+        mock_auth.ensure_logged_in.assert_awaited_once()

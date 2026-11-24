@@ -146,10 +146,13 @@ class OrderService(BaseService):
         self, order_id: int
     ) -> tuple[TrackingOutcome, DeliveryTracking | None]:
         """Fetch delivery tracking, telling "no tracking" (404) from a failure."""
+        # Built outside the try so an invalid order ID raises instead of looking
+        # like a failed request.
+        url = Endpoints.delivery_tracking(order_id)
         await self._ensure_logged_in()
 
         try:
-            response = await self._http.get(Endpoints.delivery_tracking(order_id))
+            response = await self._http.get(url)
             if response.status == 404:
                 return "not_found", None
             response.raise_for_status()
@@ -164,7 +167,9 @@ class OrderService(BaseService):
             return "failed", None
         return "ok", DeliveryTracking.from_api(data)
 
-    async def get_delivery_tracking(self, order_id: int) -> DeliveryTracking | None:
+    async def get_delivery_tracking(
+        self, order_id: int, *, raise_on_error: bool = False
+    ) -> DeliveryTracking | None:
         """Get live delivery tracking for an order: status, ETA, stops ahead, courier.
 
         Uses an unofficial endpoint observed on Rohlík.cz. The shop returns
@@ -172,13 +177,19 @@ class OrderService(BaseService):
 
         Args:
             order_id: The ID of the order.
+            raise_on_error: If True, raise on a failed request instead of
+                returning None, so None means only "no tracking" (404).
 
         Returns:
             DeliveryTracking: The tracking, or None if the shop has no tracking
-            for the order (404) or the request fails. Use
-            :meth:`get_next_delivery` to tell the two apart.
+            for the order (404) or, unless ``raise_on_error``, the request fails.
+
+        Raises:
+            APIRequestFailedError: With ``raise_on_error``, if the request fails.
         """
-        _outcome, tracking = await self._fetch_delivery_tracking(order_id)
+        outcome, tracking = await self._fetch_delivery_tracking(order_id)
+        if outcome == "failed" and raise_on_error:
+            raise APIRequestFailedError(f"Cannot fetch delivery tracking for order {order_id}")
         return tracking
 
     async def get_next_delivery(self) -> NextDelivery | None:
@@ -191,6 +202,11 @@ class OrderService(BaseService):
 
         Unlike most read methods this raises on a failed request, so that a
         failure is never mistaken for "no upcoming order" or "no tracking".
+
+        The shop removes an order from the upcoming list as soon as it is
+        delivered, so this rarely reports ``DELIVERED``; poll
+        :meth:`get_delivery_tracking` with the order ID to observe the final
+        state.
 
         Returns:
             NextDelivery: The soonest order with its ETA, or None if there is no
@@ -206,7 +222,5 @@ class OrderService(BaseService):
         if not orders:
             return None
         order = orders[0]
-        outcome, tracking = await self._fetch_delivery_tracking(order.id)
-        if outcome == "failed":
-            raise APIRequestFailedError(f"Cannot fetch delivery tracking for order {order.id}")
+        tracking = await self.get_delivery_tracking(order.id, raise_on_error=True)
         return NextDelivery.resolve(order, tracking)
