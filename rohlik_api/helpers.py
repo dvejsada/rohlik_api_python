@@ -2,7 +2,33 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+
+
+def parse_datetime(value: Any) -> datetime | None:
+    """Parse an API timestamp into a timezone-aware :class:`~datetime.datetime`.
+
+    Accepts the formats the shop's API uses, e.g. ``"2026-11-24T12:00:01Z"``,
+    ``"2026-11-24T11:40:20.12272713Z"`` (fractional seconds beyond microseconds
+    are truncated) and ``"2026-11-24T13:00:01.000+0100"``.
+
+    Args:
+        value: The raw value from an API response.
+
+    Returns:
+        An aware datetime, or None if the value is missing, not a string, not a
+        valid timestamp, or has no UTC offset (a naive value is never guessed).
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed
 
 
 def format_price(price_info: dict[str, Any] | None) -> str:
