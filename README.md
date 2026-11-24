@@ -353,10 +353,29 @@ when there is no upcoming order.
 several minutes old while queued and stops changing after delivery. Polling about once a minute
 was enough to catch every status change in the observed delivery.
 
-**Personal data.** `DeliveryTracking.courier_name` and `DeliveryProgress.courier_position` are a
-courier's personal data. They are hidden from the models' `repr`, but `dataclasses.asdict` includes
-them, so redact them before logging or sharing. The courier's phone number, photo, the delivery
-destination and route geometry are not parsed at all.
+**Courier on a map.** `DeliveryTracking.courier_position` is the courier's last reported location
+(`latitude`, `longitude`, `recorded_at`), or `None`. In observed data the shop reports it from
+`ON_THE_WAY` through `HANDING_OVER`. `DeliveryTracking.destination` is the delivery address as
+coordinates, and `DeliveryTracking.courier_distance` the straight-line distance between the two in
+metres (`None` unless both are known). It is not the driving distance. Out-of-range coordinates and
+the `(0, 0)` placeholder are treated as missing. The position only changes as often as you poll,
+and neither property checks staleness: when `progress.courier_location_stale` is `True` the shop
+itself treats the position as outdated. `CourierPosition.distance_to()` accepts any object with
+`latitude` and `longitude` (`GeoPoint`), for example your own home point.
+
+```python
+t = await client.orders.get_delivery_tracking(order_id)
+if t and (pos := t.courier_position) and not t.progress.courier_location_stale:
+    print(pos.latitude, pos.longitude, pos.recorded_at)
+    if t.courier_distance is not None:
+        print(f"{t.courier_distance / 1000:.1f} km away")
+```
+
+**Personal data.** `DeliveryTracking.courier_name`, `DeliveryProgress.courier_position` and
+`DeliveryTracking.destination` are personal data (the courier's name and location, your address).
+They are hidden from the models' `repr`, but `dataclasses.asdict` includes them, so redact them
+before logging or sharing. The courier's phone number, photo and route geometry are not parsed at
+all.
 
 ## Error handling
 

@@ -17,6 +17,10 @@ delivery on 2026-11-24 (HA-RohlikCZ `docs/plans/2026-11-24-delivery-tracking-obs
 
 Out of scope: the SSE stream, announcements, moving order detail to v4, the delivery destination, and HA work.
 
+> **Update (0.5.0):** the delivery destination is now parsed as `DeliveryTracking.destination`,
+> with `courier_position`/`courier_distance` shortcuts, for the HA courier map. The notes below
+> about dropping `destination` describe 0.4.0.
+
 ---
 
 ## What was observed (and what was not)
@@ -127,7 +131,7 @@ class DeliveryTracking:
 
 Left out on purpose:
 - `destination` (the customer's location; consumers know their own address, and it can be added later
-  but never removed)
+  but never removed). *0.4.0 only: parsed since 0.5.0.*
 - the phone number and photo
 - the `courierMovement` and `routeToStop` polylines
 - any `raw` field
@@ -260,7 +264,7 @@ propagates, as in every other read method.
 
 `tests/fixtures/delivery_tracking/*.json` are **written by hand** using only the keys the models read.
 Each one also has the keys that must be proven dropped (`phoneNumber`, `photoUrl`, `destination`,
-`courierMovement`, `routeToStop`). The values are constants:
+`courierMovement`, `routeToStop`; `destination` is parsed since 0.5.0). The values are constants:
 
 | Field | Value |
 | --- | --- |
@@ -357,7 +361,7 @@ the case the heuristic most depends on.
 | --- | --- |
 | Raise in 3.3 when upcoming fails? | Yes, and also when tracking fails (B2). `None` means only "no upcoming order" |
 | Default `eta`? | The courier ETA, raised to the floor only while `IN_QUEUE`, flagged by `eta_capped`. The raw value stays on `tracking.estimated_arrival` |
-| Expose `destination`? | No, not in 0.4.0 |
+| Expose `destination`? | No, not in 0.4.0; added in 0.5.0 |
 | Nested `progress`? | Yes. Convenience properties on `DeliveryTracking` keep access flat |
 | Should 3.3 live in the library? | Yes, as a pure `resolve()` plus a thin wrapper, so HA can use the rule without a duplicate upcoming request |
 
