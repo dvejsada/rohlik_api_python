@@ -109,6 +109,14 @@ class Endpoints:
         return f"/api/v1/products/card?{params}&categoryType={quote(category_type, safe='')}"
 
     @classmethod
+    def favourite_products(cls, page: int = 0, size: int = 50, sort: str = "recommended") -> str:
+        """Build the endpoint URL listing the IDs of the user's favourite products."""
+        return (
+            f"/api/v1/categories/favorite/products"
+            f"?page={page}&size={size}&sort={quote(sort, safe='')}&filter=&excludeProductIds="
+        )
+
+    @classmethod
     def week_sales(cls, page: int = 0, size: int = 30, sort: str = "recommended") -> str:
         """Build the 'deals of the week' (Akce týdne) component URL."""
         return (

@@ -19,6 +19,11 @@ from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
 
+#: Page size of the favourites list and chunk size of product-card requests.
+FAVOURITES_PAGE_SIZE = 50
+#: Upper bound on favourites pages fetched (50 x 40 = 2000 products).
+FAVOURITES_MAX_PAGES = 40
+
 
 class ProductService(BaseService):
     """Service for product-related operations."""
@@ -74,7 +79,9 @@ class ProductService(BaseService):
         found_products = found_products[:limit]
 
         return SearchResults(
-            results=[ProductSearchResult.from_api(product) for product in found_products]
+            results=[
+                ProductSearchResult.from_api(product, self._cdn_url) for product in found_products
+            ]
         )
 
     async def get_ai_summary(self, product_id: int) -> AISummary | None:
@@ -165,8 +172,82 @@ class ProductService(BaseService):
         if not isinstance(payload, list):
             return None
 
-        by_id = {card.id: card for card in (ProductCard.from_api(item) for item in payload)}
+        by_id = {
+            card.id: card
+            for card in (
+                ProductCard.from_api(item, self._cdn_url)
+                for item in payload
+                if isinstance(item, dict)
+            )
+        }
         return [by_id[pid] for pid in product_ids if pid in by_id]
+
+    async def get_favourite_ids(self) -> list[int] | None:
+        """Get the IDs of the user's favourite products ("Favoriten").
+
+        Pages through the favourites category until a page comes back short.
+        Sponsored entries (``interactiveProductCardAds``) are left out.
+
+        Returns:
+            The product IDs in the shop's order (no duplicates), or None if
+            the first request fails. A failure on a later page returns the IDs
+            collected so far.
+        """
+        await self._ensure_logged_in()
+
+        ids: list[int] = []
+        seen: set[int] = set()
+        for page in range(FAVOURITES_MAX_PAGES):
+            try:
+                url = Endpoints.favourite_products(page=page, size=FAVOURITES_PAGE_SIZE)
+                response = await self._http.get(url)
+                response.raise_for_status()
+                payload = response.json()
+            except HTTP_ERRORS as err:
+                _LOGGER.warning("Error fetching favourite products (page %s): %s", page, err)
+                return ids if page else None
+
+            data = payload.get("data", payload) if isinstance(payload, dict) else {}
+            if not isinstance(data, dict):
+                return ids if page else None
+            batch = data.get("productIds")
+            if not isinstance(batch, list):
+                return ids if page else None
+            ads = {
+                ad.get("productId")
+                for ad in data.get("interactiveProductCardAds") or []
+                if isinstance(ad, dict)
+            }
+            for pid in batch:
+                if isinstance(pid, int) and pid not in ads and pid not in seen:
+                    seen.add(pid)
+                    ids.append(pid)
+            if len(batch) < FAVOURITES_PAGE_SIZE:
+                break
+        return ids
+
+    async def get_favourites(self) -> list[ProductCard] | None:
+        """Get the user's favourite products with name, packaging, price and image.
+
+        Resolves :meth:`get_favourite_ids`, then loads the product cards in
+        chunks of :data:`FAVOURITES_PAGE_SIZE`.
+
+        Returns:
+            A list of :class:`ProductCard` in the shop's order, an empty list if
+            there are no favourites, or None if any request fails.
+        """
+        ids = await self.get_favourite_ids()
+        if ids is None:
+            return None
+        cards: list[ProductCard] = []
+        for start in range(0, len(ids), FAVOURITES_PAGE_SIZE):
+            chunk = await self.get_cards(
+                ids[start : start + FAVOURITES_PAGE_SIZE], category_type="favorite"
+            )
+            if chunk is None:
+                return None
+            cards.extend(chunk)
+        return cards
 
     async def get_week_sales(
         self, page: int = 0, size: int = 30, sort: str = "recommended"

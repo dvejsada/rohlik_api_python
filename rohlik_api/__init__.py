@@ -9,7 +9,7 @@ from .auth import AuthManager
 from .client import RohlikAPI
 from .endpoints import BASE_URL, Endpoints
 from .errors import APIRequestFailedError, InvalidCredentialsError, RohlikAPIError
-from .helpers import format_price, mask_data, parse_datetime
+from .helpers import cdn_url_for, format_price, image_url, mask_data, parse_datetime
 from .http_client import HttpClient
 from .models import (
     AISummary,
@@ -20,6 +20,7 @@ from .models import (
     DeliveryDestination,
     DeliveryEtaSource,
     DeliveryProgress,
+    DeliverySlot,
     DeliveryTracking,
     DirectionSection,
     DirectionStep,
@@ -31,6 +32,7 @@ from .models import (
     IngredientProducts,
     NextDelivery,
     NutritionalValue,
+    OrderItem,
     ProductCard,
     ProductComposition,
     ProductPrice,
@@ -60,6 +62,7 @@ __all__ = [
     # Models
     "Cart",
     "CartItem",
+    "DeliverySlot",
     "SearchResults",
     "ProductSearchResult",
     "AISummary",
@@ -68,6 +71,7 @@ __all__ = [
     "Allergens",
     "ProductPrice",
     "ProductCard",
+    "OrderItem",
     "RecipeSearchResults",
     "RecipeSummary",
     "RecipeDetail",
@@ -93,6 +97,8 @@ __all__ = [
     "mask_data",
     "format_price",
     "parse_datetime",
+    "image_url",
+    "cdn_url_for",
     # Advanced: low-level components
     "HttpClient",
     "AuthManager",

@@ -162,6 +162,7 @@ Functionality is grouped into services, accessed as properties on the client:
 ```python
 # Get cart contents
 cart = await client.cart.get_content()
+# CartItem has id, cart_item_id, name, quantity, price, category_name, brand, currency, image
 # -> Cart(total_price=199.90, total_items=3, can_make_order=True, products=[CartItem, ...],
 #         minimum_order_price=..., currency="CZK")
 # can_make_order also requires checkout details (e.g. a delivery slot); to check
@@ -183,8 +184,10 @@ await client.cart.delete_item(order_field_id="abc123")
 ```python
 # Search for products -> SearchResults | None (None only on request failure)
 results = await client.products.search("mléko", limit=10, favourite=False)
-for product in results.results:  # ProductSearchResult: id, name, price, brand, amount
-    print(product.name, product.price)
+for product in results.results:  # ProductSearchResult: id, name, price, brand, amount, image
+    print(product.name, product.price, product.image)
+# image is the full CDN URL of the product picture (built from the API's imgPath
+# and the shop's Site.cdn_url), or None when the API sends no picture.
 
 # AI-generated product summary -> AISummary | None
 summary = await client.products.get_ai_summary(product_id=1384964)
@@ -209,6 +212,13 @@ cards = await client.products.get_cards([1425155, 1384964])
 deals = await client.products.get_week_sales(size=30)
 for card in deals or []:
     print(card.name, card.price, card.original_price, card.on_sale)
+
+# Your favourite products ("Oblíbené"), with image -> list[ProductCard] | None
+# Pages through the favourites list (sponsored entries are skipped), then loads
+# the cards in chunks of 50. get_favourite_ids() returns only the IDs.
+favourites = await client.products.get_favourites()
+for card in favourites or []:
+    print(card.id, card.name, card.amount, card.image, card.in_stock)
 ```
 
 ### Orders service (`client.orders`)
@@ -228,6 +238,11 @@ tracking = await client.orders.get_delivery_tracking(order_id=12345678)
 
 # Soonest upcoming order + its tracking + resolved ETA -> NextDelivery | None (raises on failure)
 nxt = await client.orders.get_next_delivery()
+
+# Line items of one order (upcoming or delivered) -> list[OrderItem] | None
+# OrderItem: id (product), name, quantity, price, unit_price, textual_amount,
+# currency, image. Uses the same request as get_detail.
+items = await client.orders.get_items(order_id=12345678)
 ```
 
 See [Tracking a delivery](#tracking-a-delivery) for what these return.
@@ -238,6 +253,7 @@ See [Tracking a delivery](#tracking-a-delivery) for what these return.
 delivery = await client.delivery.get_info()                    # first available delivery
 timeslot = await client.delivery.get_timeslot_reservation()    # reserved slot, if any
 slots = await client.delivery.get_next_slots()                 # upcoming slots for your address
+windows = await client.delivery.get_slots()                    # every window as DeliverySlot
 announcements = await client.delivery.get_announcements()      # e.g. courier ETA messages
 addresses = await client.delivery.get_addresses()              # saved delivery addresses
 address_id = await client.delivery.get_active_address_id()     # address used for slots
@@ -246,6 +262,11 @@ address_id = await client.delivery.get_active_address_id()     # address used fo
 `get_next_slots()` needs a delivery address. The login response does not always
 include one, so the client falls back to your saved addresses (preferring the one
 you are currently delivered to) and caches the result.
+
+`get_slots()` parses the same response into a sorted `list[DeliverySlot]`: every
+one-hour window (`type` `"VIRTUAL"`, `minutes` 60) and, where the shop offers them,
+the 15-minute windows (`"ON_TIME"`, `minutes` 15, usually `premium`). Fully booked
+windows are included with `free_percent` 0 (`available` is False).
 
 ### Account service (`client.account`)
 

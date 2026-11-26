@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from .sites import SITES
+
 
 def parse_datetime(value: Any) -> datetime | None:
     """Parse an API timestamp into a timezone-aware :class:`~datetime.datetime`.
@@ -81,3 +83,49 @@ def mask_data(input_dict: Any) -> Any:
             result[key] = "XXXXXXX"
 
     return result
+
+
+def cdn_url_for(base_url: str) -> str:
+    """Return the image CDN base URL for a shop's API ``base_url``.
+
+    Known shops use :attr:`~rohlik_api.Site.cdn_url`. For any other base URL the
+    ``www.`` host prefix is swapped for ``cdn.``, the pattern the known shops
+    follow (``https://www.rohlik.cz`` -> ``https://cdn.rohlik.cz``).
+
+    Args:
+        base_url: The shop's base URL, e.g. ``"https://www.gurkerl.at"``.
+
+    Returns:
+        The CDN base URL without a trailing slash.
+    """
+    base = base_url.rstrip("/")
+    for site in SITES.values():
+        if site.base_url == base and site.cdn_url:
+            return site.cdn_url
+    return base.replace("://www.", "://cdn.", 1)
+
+
+def image_url(path: Any, cdn_url: str = "") -> str | None:
+    """Turn an image path from the API into a full URL.
+
+    Absolute URLs are returned unchanged, protocol-relative ones (``//host/…``)
+    get ``https:``, and relative paths are joined onto ``cdn_url``.
+
+    Args:
+        path: The image path or URL as returned by the API (``imgPath``).
+        cdn_url: Base URL of the shop's image CDN, see :func:`cdn_url_for`.
+
+    Returns:
+        The full image URL, or ``None`` when ``path`` is empty or not a string,
+        or when it is relative and no ``cdn_url`` is given.
+    """
+    if not isinstance(path, str) or not path.strip():
+        return None
+    text: str = path.strip()
+    if text.startswith(("https://", "http://")):
+        return text
+    if text.startswith("//"):
+        return f"https:{text}"
+    if not cdn_url:
+        return None
+    return f"{cdn_url.rstrip('/')}/{text.lstrip('/')}"
