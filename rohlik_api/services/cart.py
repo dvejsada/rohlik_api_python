@@ -31,7 +31,7 @@ class CartService(BaseService):
         try:
             response = await self._http.get(Endpoints.CART)
             response.raise_for_status()
-            return Cart.from_api(response.json())
+            return Cart.from_api(response.json(), self._cdn_url)
         except HTTP_ERRORS as err:
             _LOGGER.error("Request failed: %s", err)
             raise APIRequestFailedError(f"Failed to fetch cart: {err}") from err

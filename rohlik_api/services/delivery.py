@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from ..endpoints import Endpoints
+from ..models import DeliverySlot
 from .base import BaseService
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,6 +98,23 @@ class DeliveryService(BaseService):
 
         url = Endpoints.timeslots(user_id=uid, address_id=aid)
         return await self._fetch_endpoint(url, "next delivery slots")
+
+    async def get_slots(
+        self, user_id: int | None = None, address_id: int | None = None
+    ) -> list[DeliverySlot] | None:
+        """Get every delivery window of the coming days as :class:`DeliverySlot`.
+
+        Uses the same request as :meth:`get_next_slots` and parses all
+        ``availabilityDays`` (one-hour and 15-minute windows, booked-out ones
+        included, see :attr:`DeliverySlot.available`).
+
+        Returns:
+            The windows sorted by start time, or None if the request fails.
+        """
+        payload = await self.get_next_slots(user_id=user_id, address_id=address_id)
+        if payload is None:
+            return None
+        return DeliverySlot.list_from_api(payload)
 
     async def get_announcements(self) -> dict[str, Any] | None:
         """Get delivery announcements.

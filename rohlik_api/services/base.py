@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from ..auth import AuthManager
+from ..helpers import cdn_url_for
 from ..http_client import HTTP_ERRORS, HttpClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,9 @@ class BaseService:
     def __init__(self, http_client: HttpClient, auth_manager: AuthManager) -> None:
         self._http = http_client
         self._auth = auth_manager
+        base_url = getattr(http_client, "base_url", "")
+        # Image CDN of the shop, used to complete relative ``imgPath`` values.
+        self._cdn_url = cdn_url_for(base_url) if isinstance(base_url, str) and base_url else ""
 
     async def _ensure_logged_in(self) -> None:
         """Ensure the client is logged in before making requests."""
